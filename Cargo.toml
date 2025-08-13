@@ -1,0 +1,33 @@
+[package]
+name = "poseidon-hash"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Generic multi-field Poseidon hash implementation for elliptic curves"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/poseidon-hash"
+keywords = ["poseidon", "hash", "cryptography", "zk-snark", "elliptic-curves"]
+categories = ["cryptography", "no-std"]
+
+[lib]
+name = "poseidon_hash"
+
+[dependencies]
+light-poseidon = "0.3.0"
+ark-bn254 = "0.5"
+ark-bls12-381 = "0.5"
+ark-bls12-377 = "0.5"
+ark-pallas = "0.5"
+ark-vesta = "0.5"
+ark-ff = "0.5"
+ark-ec = "0.5"
+num-bigint = "0.4"
+lazy_static = "1.4"
+
+[dev-dependencies]
+
+[[example]]
+name = "basic_usage"
+
+[[example]]
+name = "multi_curve"
