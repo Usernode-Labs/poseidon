@@ -8,6 +8,12 @@ use light_poseidon::{Poseidon, PoseidonHasher};
 use ark_ec::AffineRepr;
 use std::marker::PhantomData;
 
+/// Number of bits per byte
+const BITS_PER_BYTE: usize = 8;
+
+/// Bit alignment constant used for ceiling division to convert bits to bytes
+const BIT_TO_BYTE_ALIGNMENT: u32 = BITS_PER_BYTE as u32 - 1;
+
 /// Multi-field input types for the generic Poseidon hasher.
 /// 
 /// This enum provides type-safe input handling for different field element types
@@ -101,7 +107,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
             // Fr larger than Fq - need to decompose (rare case)
             let chunks_needed = ((fr_bits + fq_bits - 1) / fq_bits) as usize;
             let bytes = element.into_bigint().to_bytes_le();
-            let bytes_per_chunk = (fq_bits as usize + 7) / 8;
+            let bytes_per_chunk = (fq_bits as usize + BIT_TO_BYTE_ALIGNMENT as usize) / BITS_PER_BYTE;
             
             for i in 0..chunks_needed {
                 let start = i * bytes_per_chunk;
@@ -199,48 +205,109 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parameters::pallas::PALLAS_PARAMS;
-    use crate::types::PallasHasher;
+    use crate::types::{PallasHasher, PallasInput, BN254Hasher, BN254Input};
+    use ark_ec::AffineRepr;
 
     #[test]
-    fn test_hasher_basic_functionality() {
-        let mut hasher = PallasHasher::new_from_ref(&PALLAS_PARAMS);
+    fn test_embedded_parameters_basic() {
+        let mut hasher = PallasHasher::new();
         
         let a = ark_pallas::Fq::from(1u64);
         let b = ark_pallas::Fq::from(2u64);
         
-        hasher.absorb_base_field(a);
-        hasher.absorb_base_field(b);
+        hasher.update(PallasInput::BaseField(a));
+        hasher.update(PallasInput::BaseField(b));
         
         let hash = hasher.squeeze();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
 
     #[test]
-    fn test_proper_chaining() {
-        // Test that chaining works correctly
-        let mut hasher = PallasHasher::new_from_ref(&PALLAS_PARAMS);
+    fn test_proper_chaining_with_embedded_params() {
+        // Test that chaining works correctly with embedded parameters
+        let mut hasher = PallasHasher::new();
         
-        let a = ark_pallas::Fq::from(1u64);
-        let b = ark_pallas::Fq::from(2u64);
-        let c = ark_pallas::Fq::from(3u64);
-        let d = ark_pallas::Fq::from(4u64);
+        let a = ark_pallas::Fr::from(1u64);
+        let b = ark_pallas::Fr::from(2u64);
+        let c = ark_pallas::Fr::from(3u64);
+        let d = ark_pallas::Fr::from(4u64);
         
-        hasher.absorb_base_field(a);
-        hasher.absorb_base_field(b);
-        hasher.absorb_base_field(c);
-        hasher.absorb_base_field(d);
+        hasher.update(PallasInput::ScalarField(a));
+        hasher.update(PallasInput::ScalarField(b));
+        hasher.update(PallasInput::ScalarField(c));
+        hasher.update(PallasInput::ScalarField(d));
         
         let hash_abcd = hasher.squeeze();
         
         // Hash just the last two elements
-        let mut hasher2 = PallasHasher::new_from_ref(&PALLAS_PARAMS);
-        hasher2.absorb_base_field(c);
-        hasher2.absorb_base_field(d);
+        let mut hasher2 = PallasHasher::new();
+        hasher2.update(PallasInput::ScalarField(c));
+        hasher2.update(PallasInput::ScalarField(d));
         
         let hash_cd = hasher2.squeeze();
         
         // These should be different due to proper chaining
         assert_ne!(hash_abcd, hash_cd);
+    }
+
+    #[test]
+    fn test_multi_field_types() {
+        let mut hasher = PallasHasher::new();
+        
+        let scalar = ark_pallas::Fr::from(42u64);
+        let base = ark_pallas::Fq::from(100u64);
+        let generator = ark_pallas::Affine::generator();
+        
+        hasher.update(PallasInput::ScalarField(scalar));
+        hasher.update(PallasInput::BaseField(base));
+        hasher.update(PallasInput::CurvePoint(generator));
+        
+        let hash = hasher.squeeze();
+        assert_ne!(hash, ark_pallas::Fq::zero());
+    }
+
+    #[test]
+    fn test_cross_curve_type_safety() {
+        // Each curve hasher has its own embedded parameters
+        let mut pallas_hasher = PallasHasher::new();
+        let mut bn254_hasher = BN254Hasher::new();
+        
+        let pallas_scalar = ark_pallas::Fr::from(123u64);
+        let bn254_scalar = ark_bn254::Fr::from(123u64);
+        
+        pallas_hasher.update(PallasInput::ScalarField(pallas_scalar));
+        bn254_hasher.update(BN254Input::ScalarField(bn254_scalar));
+        
+        let pallas_hash = pallas_hasher.squeeze();
+        let bn254_hash = bn254_hasher.squeeze();
+        
+        // These should be different because they use different parameters
+        assert_ne!(pallas_hash.to_string(), bn254_hash.to_string());
+    }
+
+    #[test]
+    fn test_default_constructor() {
+        // Test that Default trait works for convenient initialization
+        let mut hasher: PallasHasher = Default::default();
+        
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
+        let hash = hasher.squeeze();
+        
+        assert_ne!(hash, ark_pallas::Fq::zero());
+    }
+
+    #[test]
+    fn test_hasher_reuse() {
+        let mut hasher = PallasHasher::new();
+        
+        // First hash
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64)));
+        let hash1 = hasher.squeeze();
+        
+        // Second hash (hasher should reset automatically)
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64)));
+        let hash2 = hasher.squeeze();
+        
+        assert_ne!(hash1, hash2);
     }
 }

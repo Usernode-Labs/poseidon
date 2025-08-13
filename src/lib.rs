@@ -16,16 +16,20 @@ elliptic curves and field types.
 ## Quick Start
 
 ```rust
-use poseidon_hash::{MultiFieldHasher, FieldInput};
-use poseidon_hash::parameters::pallas::PALLAS_PARAMS;
+use poseidon_hash::prelude::*;
+use ark_ec::AffineRepr;
 
-// Create hasher with embedded parameters
-let mut hasher = MultiFieldHasher::new(&PALLAS_PARAMS);
+// Create hasher with embedded parameters - no manual parameter passing needed!
+let mut hasher = PallasHasher::new();
 
 // Hash different field types
-hasher.absorb(FieldInput::ScalarField(scalar));
-hasher.absorb(FieldInput::BaseField(base));
-hasher.absorb(FieldInput::CurvePoint(point));
+let scalar = ark_pallas::Fr::from(42u64);
+let base = ark_pallas::Fq::from(100u64);
+let point = ark_pallas::Affine::generator();
+
+hasher.update(PallasInput::ScalarField(scalar));
+hasher.update(PallasInput::BaseField(base));
+hasher.update(PallasInput::CurvePoint(point));
 
 let hash = hasher.squeeze();
 ```

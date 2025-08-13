@@ -1,7 +1,7 @@
 [package]
 name = "poseidon-hash"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Your Name <your.email@example.com>"]
 description = "Generic multi-field Poseidon hash implementation for elliptic curves"
 license = "MIT OR Apache-2.0"
