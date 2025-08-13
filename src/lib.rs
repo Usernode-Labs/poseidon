@@ -83,12 +83,15 @@ pub use hasher::{MultiFieldHasher, FieldInput};
 // Public modules
 pub mod hasher;
 pub mod parameters;
+pub mod primitive;
 pub mod types;
 
 // Re-export commonly used types
 pub mod prelude {
     pub use crate::hasher::{MultiFieldHasher, FieldInput, HasherError, HasherResult};
     pub use crate::parameters::SECURITY_LEVEL;
+    pub use crate::primitive::{RustInput, PackingConfig, PackingMode, PaddingMode};
+    pub use crate::types::PoseidonHasher;
     
     // Re-export curve-specific type aliases
     pub use crate::types::{

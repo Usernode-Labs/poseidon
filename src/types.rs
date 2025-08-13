@@ -6,6 +6,76 @@
 
 use crate::hasher::{MultiFieldHasher, FieldInput, HasherResult};
 use crate::parameters::*;
+use crate::primitive::{RustInput, PackingConfig};
+use ark_ff::PrimeField;
+
+/// Trait for curve-specific Poseidon hashers with primitive type support.
+/// 
+/// This trait ensures a consistent interface across all curve implementations
+/// while maintaining type safety and embedding curve-specific parameters.
+#[allow(private_interfaces)] // InnerHasher is intentionally private - it's an implementation detail
+pub trait PoseidonHasher<F, I> 
+where 
+    F: PrimeField,
+{
+    /// Create a new hasher with default (byte-efficient) packing configuration.
+    fn new() -> Self;
+    
+    /// Create a new hasher with custom packing configuration.
+    fn new_with_config(config: PackingConfig) -> Self;
+    
+    /// Get a mutable reference to the inner MultiFieldHasher for delegation.
+    /// This is an implementation detail and should not be used directly.
+    /// Only trait implementations should provide this method.
+    #[doc(hidden)]
+    fn inner_mut(&mut self) -> &mut dyn InnerHasher<F, I>;
+    
+    /// Update the hasher with a field-specific input (Fr, Fq, or curve points).
+    fn update(&mut self, input: I) -> HasherResult<()> {
+        self.inner_mut().absorb_field_input(input)
+    }
+    
+    /// Update the hasher with a primitive Rust type.
+    fn update_primitive(&mut self, input: RustInput) -> HasherResult<()> {
+        self.inner_mut().absorb_primitive_input(input)
+    }
+    
+    /// Squeeze the current hash result and reset the hasher.
+    fn squeeze(&mut self) -> HasherResult<F> {
+        self.inner_mut().squeeze_result()
+    }
+}
+
+/// Internal trait to abstract over the MultiFieldHasher operations.
+/// This allows us to provide default implementations in PoseidonHasher.
+trait InnerHasher<F, I>
+where
+    F: PrimeField,
+{
+    fn absorb_field_input(&mut self, input: I) -> HasherResult<()>;
+    fn absorb_primitive_input(&mut self, input: RustInput) -> HasherResult<()>;
+    fn squeeze_result(&mut self) -> HasherResult<F>;
+}
+
+// Implement InnerHasher for MultiFieldHasher to enable delegation
+impl<F, S, G> InnerHasher<F, FieldInput<F, S, G>> for MultiFieldHasher<F, S, G>
+where
+    F: PrimeField + ark_ff::Zero,
+    S: PrimeField,
+    G: ark_ec::AffineRepr<BaseField = F>,
+{
+    fn absorb_field_input(&mut self, input: FieldInput<F, S, G>) -> HasherResult<()> {
+        self.absorb(input)
+    }
+    
+    fn absorb_primitive_input(&mut self, input: RustInput) -> HasherResult<()> {
+        self.absorb_primitive(input)
+    }
+    
+    fn squeeze_result(&mut self) -> HasherResult<F> {
+        self.squeeze()
+    }
+}
 
 // Pallas curve hasher
 /// Pallas curve multi-field hasher with embedded parameters.
@@ -14,28 +84,27 @@ pub struct PallasHasher {
     inner: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>,
 }
 
-impl PallasHasher {
-    /// Create a new Pallas hasher with embedded parameters.
-    pub fn new() -> Self {
+impl PoseidonHasher<ark_pallas::Fq, PallasInput> for PallasHasher {
+    fn new() -> Self {
         Self {
             inner: MultiFieldHasher::new_from_ref(&*pallas::PALLAS_PARAMS),
         }
     }
     
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: PallasInput) -> HasherResult<()> {
-        self.inner.absorb(input)
+    fn new_with_config(config: PackingConfig) -> Self {
+        Self {
+            inner: MultiFieldHasher::new_with_config_from_ref(&*pallas::PALLAS_PARAMS, config),
+        }
     }
     
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_pallas::Fq> {
-        self.inner.squeeze()
+    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_pallas::Fq, PallasInput> {
+        &mut self.inner
     }
 }
 
 impl Default for PallasHasher {
     fn default() -> Self {
-        Self::new()
+        <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new()
     }
 }
 
@@ -49,28 +118,27 @@ pub struct VestaHasher {
     inner: MultiFieldHasher<ark_vesta::Fq, ark_vesta::Fr, ark_vesta::Affine>,
 }
 
-impl VestaHasher {
-    /// Create a new Vesta hasher with embedded parameters.
-    pub fn new() -> Self {
+impl PoseidonHasher<ark_vesta::Fq, VestaInput> for VestaHasher {
+    fn new() -> Self {
         Self {
             inner: MultiFieldHasher::new_from_ref(&*vesta::VESTA_PARAMS),
         }
     }
     
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: VestaInput) -> HasherResult<()> {
-        self.inner.absorb(input)
+    fn new_with_config(config: PackingConfig) -> Self {
+        Self {
+            inner: MultiFieldHasher::new_with_config_from_ref(&*vesta::VESTA_PARAMS, config),
+        }
     }
     
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_vesta::Fq> {
-        self.inner.squeeze()
+    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_vesta::Fq, VestaInput> {
+        &mut self.inner
     }
 }
 
 impl Default for VestaHasher {
     fn default() -> Self {
-        Self::new()
+        <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new()
     }
 }
 
@@ -84,28 +152,27 @@ pub struct BN254Hasher {
     inner: MultiFieldHasher<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>,
 }
 
-impl BN254Hasher {
-    /// Create a new BN254 hasher with embedded parameters.
-    pub fn new() -> Self {
+impl PoseidonHasher<ark_bn254::Fq, BN254Input> for BN254Hasher {
+    fn new() -> Self {
         Self {
             inner: MultiFieldHasher::new_from_ref(&*bn254::BN254_PARAMS),
         }
     }
     
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BN254Input) -> HasherResult<()> {
-        self.inner.absorb(input)
+    fn new_with_config(config: PackingConfig) -> Self {
+        Self {
+            inner: MultiFieldHasher::new_with_config_from_ref(&*bn254::BN254_PARAMS, config),
+        }
     }
     
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_bn254::Fq> {
-        self.inner.squeeze()
+    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bn254::Fq, BN254Input> {
+        &mut self.inner
     }
 }
 
 impl Default for BN254Hasher {
     fn default() -> Self {
-        Self::new()
+        <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new()
     }
 }
 
@@ -119,28 +186,27 @@ pub struct BLS12_381Hasher {
     inner: MultiFieldHasher<ark_bls12_381::Fq, ark_bls12_381::Fr, ark_bls12_381::G1Affine>,
 }
 
-impl BLS12_381Hasher {
-    /// Create a new BLS12-381 hasher with embedded parameters.
-    pub fn new() -> Self {
+impl PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input> for BLS12_381Hasher {
+    fn new() -> Self {
         Self {
             inner: MultiFieldHasher::new_from_ref(&*bls12_381::BLS12_381_PARAMS),
         }
     }
     
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BLS12_381Input) -> HasherResult<()> {
-        self.inner.absorb(input)
+    fn new_with_config(config: PackingConfig) -> Self {
+        Self {
+            inner: MultiFieldHasher::new_with_config_from_ref(&*bls12_381::BLS12_381_PARAMS, config),
+        }
     }
     
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_bls12_381::Fq> {
-        self.inner.squeeze()
+    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bls12_381::Fq, BLS12_381Input> {
+        &mut self.inner
     }
 }
 
 impl Default for BLS12_381Hasher {
     fn default() -> Self {
-        Self::new()
+        <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new()
     }
 }
 
@@ -154,28 +220,27 @@ pub struct BLS12_377Hasher {
     inner: MultiFieldHasher<ark_bls12_377::Fq, ark_bls12_377::Fr, ark_bls12_377::G1Affine>,
 }
 
-impl BLS12_377Hasher {
-    /// Create a new BLS12-377 hasher with embedded parameters.
-    pub fn new() -> Self {
+impl PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input> for BLS12_377Hasher {
+    fn new() -> Self {
         Self {
             inner: MultiFieldHasher::new_from_ref(&*bls12_377::BLS12_377_PARAMS),
         }
     }
     
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BLS12_377Input) -> HasherResult<()> {
-        self.inner.absorb(input)
+    fn new_with_config(config: PackingConfig) -> Self {
+        Self {
+            inner: MultiFieldHasher::new_with_config_from_ref(&*bls12_377::BLS12_377_PARAMS, config),
+        }
     }
     
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_bls12_377::Fq> {
-        self.inner.squeeze()
+    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bls12_377::Fq, BLS12_377Input> {
+        &mut self.inner
     }
 }
 
 impl Default for BLS12_377Hasher {
     fn default() -> Self {
-        Self::new()
+        <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new()
     }
 }
 

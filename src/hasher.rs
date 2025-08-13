@@ -35,6 +35,7 @@ use light_poseidon::{Poseidon, PoseidonHasher, PoseidonError};
 use ark_ec::AffineRepr;
 use std::marker::PhantomData;
 use thiserror::Error;
+use crate::primitive::{RustInput, PackingBuffer, PackingConfig, serialize_rust_input};
 
 /// Number of bits per byte
 const BITS_PER_BYTE: usize = 8;
@@ -85,6 +86,8 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     poseidon: Poseidon<F>,
     /// Internal state accumulating base field elements for hashing
     state: Vec<F>,
+    /// Buffer for accumulating primitive types before packing into field elements
+    primitive_buffer: PackingBuffer,
     /// Phantom data to track scalar field type S without storing instances
     _phantom_s: PhantomData<S>,
     /// Phantom data to track curve point type G without storing instances  
@@ -101,6 +104,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
         Self {
             poseidon: Poseidon::new(params),
             state: Vec::new(),
+            primitive_buffer: PackingBuffer::new::<F>(PackingConfig::default()),
             _phantom_s: PhantomData,
             _phantom_g: PhantomData,
         }
@@ -118,6 +122,35 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
         F: Clone,
     {
         Self::new(crate::parameters::clone_parameters(params))
+    }
+    
+    /// Creates a new multi-field hasher with custom packing configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - Poseidon parameters for the base field F
+    /// * `packing_config` - Configuration for packing primitive types
+    pub fn new_with_config(params: light_poseidon::PoseidonParameters<F>, packing_config: PackingConfig) -> Self {
+        Self {
+            poseidon: Poseidon::new(params),
+            state: Vec::new(),
+            primitive_buffer: PackingBuffer::new::<F>(packing_config),
+            _phantom_s: PhantomData,
+            _phantom_g: PhantomData,
+        }
+    }
+    
+    /// Creates a new multi-field hasher with custom packing configuration from parameter reference.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - Reference to Poseidon parameters for the base field F
+    /// * `packing_config` - Configuration for packing primitive types
+    pub fn new_with_config_from_ref(params: &light_poseidon::PoseidonParameters<F>, packing_config: PackingConfig) -> Self 
+    where
+        F: Clone,
+    {
+        Self::new_with_config(crate::parameters::clone_parameters(params), packing_config)
     }
 
     /// Absorbs a base field element (Fq) directly into the hasher state.
@@ -206,6 +239,28 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
         }
     }
 
+    /// Absorbs a primitive Rust type by serializing and packing it into field elements.
+    ///
+    /// This method handles the conversion of basic Rust types (bool, integers, strings, etc.)
+    /// into field elements using the configured packing strategy.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - The primitive value to absorb
+    pub fn absorb_primitive(&mut self, input: RustInput) -> HasherResult<()> {
+        // Serialize the input into the primitive buffer
+        serialize_rust_input(&input, &mut self.primitive_buffer)?;
+        
+        // Extract any complete field elements and absorb them
+        let field_elements = self.primitive_buffer.extract_field_elements::<F>()?;
+        for element in field_elements {
+            self.state.push(element);
+        }
+        
+        Ok(())
+    }
+    
+
     /// Finalizes the hash computation and returns the result.
     ///
     /// # Chaining Algorithm
@@ -217,9 +272,14 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     ///
     /// This ensures that every element influences the final hash result.
     pub fn squeeze(&mut self) -> HasherResult<F> {
+        // First, flush any remaining primitive data from the buffer
+        let remaining_field_elements = self.primitive_buffer.flush_remaining::<F>()?;
+        for element in remaining_field_elements {
+            self.state.push(element);
+        }
+        
         // Handle empty state
         if self.state.is_empty() {
-            self.state.clear();
             return Ok(F::zero());
         }
         
@@ -252,6 +312,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// Resets the hasher state without changing parameters.
     pub fn reset(&mut self) {
         self.state.clear();
+        self.primitive_buffer.clear();
     }
 
     /// Returns the current number of absorbed elements.
@@ -263,7 +324,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{PallasHasher, PallasInput, BN254Hasher, BN254Input};
+    use crate::types::{PallasHasher, PallasInput, BN254Hasher, BN254Input, PoseidonHasher};
     use ark_ec::AffineRepr;
 
     #[test]

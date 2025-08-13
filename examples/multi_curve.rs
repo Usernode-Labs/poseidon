@@ -16,6 +16,9 @@ fn main() {
     // Demo 3: BLS12-381 curve (Fr=255 bits, Fq=381 bits - different sizes)
     demo_bls12_381();
     
+    // Demo 4: Primitive types across all curves
+    demo_primitive_types();
+    
     // Show field size comparison
     field_size_analysis();
 }
@@ -100,4 +103,82 @@ fn field_size_analysis() {
     println!("  • Simple: Same bit size, just byte representation change");
     println!("  • Direct: Fr < Fq, direct conversion without data loss");
     println!("  • Chunking: Fr > Fq, automatic decomposition (rare)");
+}
+
+fn demo_primitive_types() {
+    println!("🚀 Demo 4: Primitive Types Across All Curves");
+    println!("  • Testing the same primitive data with all curve hashers");
+    
+    // Common test data
+    let test_data = [
+        RustInput::Bool(true),
+        RustInput::U64(123456789),
+        RustInput::from_string_slice("cross-curve"),
+        RustInput::from_bytes(&[0xAB, 0xCD, 0xEF])
+    ];
+    
+    println!("  • Test data: Bool(true), U64(123456789), String(\"cross-curve\"), Bytes([0xAB, 0xCD, 0xEF])");
+    
+    // Hash with each curve
+    let curves = [
+        ("Pallas", hash_primitives_pallas(&test_data)),
+        ("Vesta", hash_primitives_vesta(&test_data)),
+        ("BN254", hash_primitives_bn254(&test_data)),
+        ("BLS12-381", hash_primitives_bls12_381(&test_data)),
+        ("BLS12-377", hash_primitives_bls12_377(&test_data)),
+    ];
+    
+    println!("\n  🔥 Results:");
+    for (name, hash) in &curves {
+        println!("    • {:<10}: {}...", name, hash.chars().take(20).collect::<String>());
+    }
+    
+    // Verify uniqueness
+    let unique_count = curves.iter().map(|(_, h)| h).collect::<std::collections::HashSet<_>>().len();
+    if unique_count == curves.len() {
+        println!("\n  ✅ All {} curve hashes are unique!", curves.len());
+    } else {
+        println!("\n  ❌ Some hashes collided!");
+    }
+    println!();
+}
+
+fn hash_primitives_pallas(data: &[RustInput]) -> String {
+    let mut hasher = PallasHasher::new();
+    for item in data {
+        hasher.update_primitive(item.clone()).expect("Pallas update failed");
+    }
+    hasher.squeeze().expect("Pallas squeeze failed").to_string()
+}
+
+fn hash_primitives_vesta(data: &[RustInput]) -> String {
+    let mut hasher = VestaHasher::new();
+    for item in data {
+        hasher.update_primitive(item.clone()).expect("Vesta update failed");
+    }
+    hasher.squeeze().expect("Vesta squeeze failed").to_string()
+}
+
+fn hash_primitives_bn254(data: &[RustInput]) -> String {
+    let mut hasher = BN254Hasher::new();
+    for item in data {
+        hasher.update_primitive(item.clone()).expect("BN254 update failed");
+    }
+    hasher.squeeze().expect("BN254 squeeze failed").to_string()
+}
+
+fn hash_primitives_bls12_381(data: &[RustInput]) -> String {
+    let mut hasher = BLS12_381Hasher::new();
+    for item in data {
+        hasher.update_primitive(item.clone()).expect("BLS12-381 update failed");
+    }
+    hasher.squeeze().expect("BLS12-381 squeeze failed").to_string()
+}
+
+fn hash_primitives_bls12_377(data: &[RustInput]) -> String {
+    let mut hasher = BLS12_377Hasher::new();
+    for item in data {
+        hasher.update_primitive(item.clone()).expect("BLS12-377 update failed");
+    }
+    hasher.squeeze().expect("BLS12-377 squeeze failed").to_string()
 }
