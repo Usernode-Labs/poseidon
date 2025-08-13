@@ -45,7 +45,7 @@ pub mod types;
 
 // Re-export commonly used types
 pub mod prelude {
-    pub use crate::hasher::{MultiFieldHasher, FieldInput};
+    pub use crate::hasher::{MultiFieldHasher, FieldInput, HasherError, HasherResult};
     pub use crate::parameters::SECURITY_LEVEL;
     
     // Re-export curve-specific type aliases

@@ -21,30 +21,30 @@ fn main() {
     println!("📝 Absorbing different field types:");
     
     // Update with scalar field elements
-    hasher.update(PallasInput::ScalarField(scalar1));
-    println!("  • Updated with scalar field element: {}", scalar1);
+    hasher.update(PallasInput::ScalarField(scalar1)).expect("Failed to update hasher");
+    println!("  • Updated with scalar field element: {scalar1}");
     
-    hasher.update(PallasInput::ScalarField(scalar2));
-    println!("  • Updated with scalar field element: {}", scalar2);
+    hasher.update(PallasInput::ScalarField(scalar2)).expect("Failed to update hasher");
+    println!("  • Updated with scalar field element: {scalar2}");
     
     // Update with base field element
-    hasher.update(PallasInput::BaseField(base_element));
-    println!("  • Updated with base field element: {}", base_element);
+    hasher.update(PallasInput::BaseField(base_element)).expect("Failed to update hasher");
+    println!("  • Updated with base field element: {base_element}");
     
     // Update with curve point
-    hasher.update(PallasInput::CurvePoint(point));
+    hasher.update(PallasInput::CurvePoint(point)).expect("Failed to update hasher");
     println!("  • Absorbed curve point (generator)");
     
     // Compute the hash
-    let hash = hasher.squeeze();
-    println!("\n🔥 Final hash: {}", hash);
+    let hash = hasher.squeeze().expect("Failed to compute hash");
+    println!("\n🔥 Final hash: {hash}");
     
     // Demonstrate reusing the hasher
     println!("\n♻️  Reusing the hasher:");
-    hasher.update(PallasInput::ScalarField(scalar1));
-    hasher.update(PallasInput::ScalarField(scalar2));
-    let hash2 = hasher.squeeze();
-    println!("  • Hash of just two scalars: {}", hash2);
+    hasher.update(PallasInput::ScalarField(scalar1)).expect("Failed to update hasher");
+    hasher.update(PallasInput::ScalarField(scalar2)).expect("Failed to update hasher");
+    let hash2 = hasher.squeeze().expect("Failed to compute hash");
+    println!("  • Hash of just two scalars: {hash2}");
     
     // Verify hashes are different
     if hash != hash2 {

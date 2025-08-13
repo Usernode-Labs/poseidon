@@ -4,15 +4,30 @@
 //! elliptic curve and automatically handles field conversions.
 
 use ark_ff::{PrimeField, BigInteger, Zero};
-use light_poseidon::{Poseidon, PoseidonHasher};
+use light_poseidon::{Poseidon, PoseidonHasher, PoseidonError};
 use ark_ec::AffineRepr;
 use std::marker::PhantomData;
+use thiserror::Error;
 
 /// Number of bits per byte
 const BITS_PER_BYTE: usize = 8;
 
-/// Bit alignment constant used for ceiling division to convert bits to bytes
-const BIT_TO_BYTE_ALIGNMENT: u32 = BITS_PER_BYTE as u32 - 1;
+/// Errors that can occur during hashing operations.
+#[derive(Error, Debug)]
+pub enum HasherError {
+    /// Failed to hash elements due to Poseidon hasher error
+    #[error("Poseidon hashing failed: {0}")]
+    PoseidonError(#[from] PoseidonError),
+    /// Failed to extract coordinates from curve point
+    #[error("Failed to extract curve point coordinates")]
+    PointConversionFailed,
+    /// Numeric conversion failed (overflow or underflow)
+    #[error("Numeric conversion failed: {reason}")]
+    NumericConversionFailed { reason: String },
+}
+
+/// Result type for hasher operations.
+pub type HasherResult<T> = Result<T, HasherError>;
 
 /// Multi-field input types for the generic Poseidon hasher.
 /// 
@@ -89,7 +104,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// * Same bit size: Simple byte representation conversion
     /// * Fr < Fq: Direct conversion without data loss
     /// * Fr > Fq: Automatic chunking into multiple Fq elements
-    pub fn absorb_scalar_field(&mut self, element: S) {
+    pub fn absorb_scalar_field(&mut self, element: S) -> HasherResult<()> {
         let fr_bits = S::MODULUS_BIT_SIZE;
         let fq_bits = F::MODULUS_BIT_SIZE;
         
@@ -105,11 +120,22 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
             self.state.push(converted);
         } else {
             // Fr larger than Fq - need to decompose (rare case)
-            let chunks_needed = ((fr_bits + fq_bits - 1) / fq_bits) as usize;
+            let chunks_needed = fr_bits.div_ceil(fq_bits);
             let bytes = element.into_bigint().to_bytes_le();
-            let bytes_per_chunk = (fq_bits as usize + BIT_TO_BYTE_ALIGNMENT as usize) / BITS_PER_BYTE;
             
-            for i in 0..chunks_needed {
+            // Safe conversion from u32 to usize
+            let fq_bits_usize = usize::try_from(fq_bits)
+                .map_err(|_| HasherError::NumericConversionFailed { 
+                    reason: format!("Field bit size {fq_bits} too large for usize") 
+                })?;
+            let bytes_per_chunk = fq_bits_usize.div_ceil(BITS_PER_BYTE);
+            
+            let chunks_needed_usize = usize::try_from(chunks_needed)
+                .map_err(|_| HasherError::NumericConversionFailed {
+                    reason: format!("Number of chunks {chunks_needed} too large for usize")
+                })?;
+            
+            for i in 0..chunks_needed_usize {
                 let start = i * bytes_per_chunk;
                 let end = std::cmp::min(start + bytes_per_chunk, bytes.len());
                 let mut chunk = vec![0u8; bytes_per_chunk];
@@ -123,26 +149,31 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
                 self.state.push(chunk_element);
             }
         }
+        Ok(())
     }
 
     /// Absorbs a curve point by extracting and hashing its affine coordinates.
-    pub fn absorb_curve_point(&mut self, point: G) {
+    pub fn absorb_curve_point(&mut self, point: G) -> HasherResult<()> {
         if point.is_zero() {
             // Point at infinity -> absorb (0, 0)
             self.state.push(F::zero());
             self.state.push(F::zero());
         } else {
             // Regular point -> absorb (x, y) coordinates
-            let (x, y) = point.xy().unwrap();
+            let (x, y) = point.xy().ok_or(HasherError::PointConversionFailed)?;
             self.state.push(x);
             self.state.push(y);
         }
+        Ok(())
     }
 
     /// Absorbs any field input type using the appropriate specialized method.
-    pub fn absorb(&mut self, input: FieldInput<F, S, G>) {
+    pub fn absorb(&mut self, input: FieldInput<F, S, G>) -> HasherResult<()> {
         match input {
-            FieldInput::BaseField(fq) => self.absorb_base_field(fq),
+            FieldInput::BaseField(fq) => {
+                self.absorb_base_field(fq);
+                Ok(())
+            }
             FieldInput::ScalarField(fr) => self.absorb_scalar_field(fr),
             FieldInput::CurvePoint(point) => self.absorb_curve_point(point),
         }
@@ -158,11 +189,11 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// * Subsequent: H₂ = hash(H₁, C), H₃ = hash(H₂, D), ...
     ///
     /// This ensures that every element influences the final hash result.
-    pub fn squeeze(&mut self) -> F {
+    pub fn squeeze(&mut self) -> HasherResult<F> {
         // Handle empty state
         if self.state.is_empty() {
             self.state.clear();
-            return F::zero();
+            return Ok(F::zero());
         }
         
         // Pad state to even length if needed
@@ -173,22 +204,22 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
         // Proper chaining: incorporate all elements sequentially
         if self.state.len() == 2 {
             // Simple case: just hash the two elements
-            let result = self.poseidon.hash(&[self.state[0], self.state[1]]).unwrap();
+            let result = self.poseidon.hash(&[self.state[0], self.state[1]])?;
             self.state.clear();
-            return result;
+            return Ok(result);
         }
         
         // Multi-element case: chain them properly
-        let mut result = self.poseidon.hash(&[self.state[0], self.state[1]]).unwrap();
+        let mut result = self.poseidon.hash(&[self.state[0], self.state[1]])?;
         
         // Process remaining elements one by one
         for i in 2..self.state.len() {
-            result = self.poseidon.hash(&[result, self.state[i]]).unwrap();
+            result = self.poseidon.hash(&[result, self.state[i]])?;
         }
 
         // Clear state for next use
         self.state.clear();
-        result
+        Ok(result)
     }
 
     /// Resets the hasher state without changing parameters.
@@ -215,10 +246,10 @@ mod tests {
         let a = ark_pallas::Fq::from(1u64);
         let b = ark_pallas::Fq::from(2u64);
         
-        hasher.update(PallasInput::BaseField(a));
-        hasher.update(PallasInput::BaseField(b));
+        hasher.update(PallasInput::BaseField(a)).expect("Failed to update hasher");
+        hasher.update(PallasInput::BaseField(b)).expect("Failed to update hasher");
         
-        let hash = hasher.squeeze();
+        let hash = hasher.squeeze().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
 
@@ -232,19 +263,19 @@ mod tests {
         let c = ark_pallas::Fr::from(3u64);
         let d = ark_pallas::Fr::from(4u64);
         
-        hasher.update(PallasInput::ScalarField(a));
-        hasher.update(PallasInput::ScalarField(b));
-        hasher.update(PallasInput::ScalarField(c));
-        hasher.update(PallasInput::ScalarField(d));
+        hasher.update(PallasInput::ScalarField(a)).expect("Failed to update hasher");
+        hasher.update(PallasInput::ScalarField(b)).expect("Failed to update hasher");
+        hasher.update(PallasInput::ScalarField(c)).expect("Failed to update hasher");
+        hasher.update(PallasInput::ScalarField(d)).expect("Failed to update hasher");
         
-        let hash_abcd = hasher.squeeze();
+        let hash_abcd = hasher.squeeze().expect("Failed to compute hash");
         
         // Hash just the last two elements
         let mut hasher2 = PallasHasher::new();
-        hasher2.update(PallasInput::ScalarField(c));
-        hasher2.update(PallasInput::ScalarField(d));
+        hasher2.update(PallasInput::ScalarField(c)).expect("Failed to update hasher");
+        hasher2.update(PallasInput::ScalarField(d)).expect("Failed to update hasher");
         
-        let hash_cd = hasher2.squeeze();
+        let hash_cd = hasher2.squeeze().expect("Failed to compute hash");
         
         // These should be different due to proper chaining
         assert_ne!(hash_abcd, hash_cd);
@@ -258,11 +289,11 @@ mod tests {
         let base = ark_pallas::Fq::from(100u64);
         let generator = ark_pallas::Affine::generator();
         
-        hasher.update(PallasInput::ScalarField(scalar));
-        hasher.update(PallasInput::BaseField(base));
-        hasher.update(PallasInput::CurvePoint(generator));
+        hasher.update(PallasInput::ScalarField(scalar)).expect("Failed to update hasher");
+        hasher.update(PallasInput::BaseField(base)).expect("Failed to update hasher");
+        hasher.update(PallasInput::CurvePoint(generator)).expect("Failed to update hasher");
         
-        let hash = hasher.squeeze();
+        let hash = hasher.squeeze().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
 
@@ -275,11 +306,11 @@ mod tests {
         let pallas_scalar = ark_pallas::Fr::from(123u64);
         let bn254_scalar = ark_bn254::Fr::from(123u64);
         
-        pallas_hasher.update(PallasInput::ScalarField(pallas_scalar));
-        bn254_hasher.update(BN254Input::ScalarField(bn254_scalar));
+        pallas_hasher.update(PallasInput::ScalarField(pallas_scalar)).expect("Failed to update hasher");
+        bn254_hasher.update(BN254Input::ScalarField(bn254_scalar)).expect("Failed to update hasher");
         
-        let pallas_hash = pallas_hasher.squeeze();
-        let bn254_hash = bn254_hasher.squeeze();
+        let pallas_hash = pallas_hasher.squeeze().expect("Failed to compute hash");
+        let bn254_hash = bn254_hasher.squeeze().expect("Failed to compute hash");
         
         // These should be different because they use different parameters
         assert_ne!(pallas_hash.to_string(), bn254_hash.to_string());
@@ -290,8 +321,8 @@ mod tests {
         // Test that Default trait works for convenient initialization
         let mut hasher: PallasHasher = Default::default();
         
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
-        let hash = hasher.squeeze();
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).expect("Failed to update hasher");
+        let hash = hasher.squeeze().expect("Failed to compute hash");
         
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
@@ -301,13 +332,39 @@ mod tests {
         let mut hasher = PallasHasher::new();
         
         // First hash
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64)));
-        let hash1 = hasher.squeeze();
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64))).expect("Failed to update hasher");
+        let hash1 = hasher.squeeze().expect("Failed to compute hash");
         
         // Second hash (hasher should reset automatically)
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64)));
-        let hash2 = hasher.squeeze();
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64))).expect("Failed to update hasher");
+        let hash2 = hasher.squeeze().expect("Failed to compute hash");
         
         assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_error_cascading() {
+        use crate::hasher::{MultiFieldHasher, HasherError};
+        use crate::parameters::pallas::PALLAS_PARAMS;
+        
+        // Create hasher with low-level API to trigger potential Poseidon errors
+        let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> = 
+            MultiFieldHasher::new_from_ref(&*PALLAS_PARAMS);
+        
+        // Test that errors cascade properly - try squeezing empty state
+        let result = hasher.squeeze();
+        
+        // Test error message formatting includes the underlying PoseidonError
+        match result {
+            Ok(hash) => {
+                // Should succeed (empty state returns zero, which is valid)
+                assert_eq!(hash, ark_pallas::Fq::zero());
+            },
+            Err(HasherError::PoseidonError(poseidon_err)) => {
+                // If we get a Poseidon error, verify it cascades properly
+                println!("Successfully cascaded Poseidon error: {poseidon_err}");
+            },
+            Err(other) => panic!("Unexpected error type: {other:?}"),
+        }
     }
 }

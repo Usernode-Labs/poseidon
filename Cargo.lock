@@ -371,6 +371,7 @@ dependencies = [
  "lazy_static",
  "light-poseidon",
  "num-bigint",
+ "thiserror",
 ]
 
 [[package]]

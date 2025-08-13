@@ -4,7 +4,7 @@
 //! at compile time, ensuring type safety and eliminating the possibility
 //! of using incorrect parameters.
 
-use crate::hasher::{MultiFieldHasher, FieldInput};
+use crate::hasher::{MultiFieldHasher, FieldInput, HasherResult};
 use crate::parameters::*;
 
 // Pallas curve hasher
@@ -23,12 +23,12 @@ impl PallasHasher {
     }
     
     /// Update the hasher with a field input.
-    pub fn update(&mut self, input: PallasInput) {
-        self.inner.absorb(input);
+    pub fn update(&mut self, input: PallasInput) -> HasherResult<()> {
+        self.inner.absorb(input)
     }
     
     /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> ark_pallas::Fq {
+    pub fn squeeze(&mut self) -> HasherResult<ark_pallas::Fq> {
         self.inner.squeeze()
     }
 }
@@ -58,12 +58,12 @@ impl VestaHasher {
     }
     
     /// Update the hasher with a field input.
-    pub fn update(&mut self, input: VestaInput) {
-        self.inner.absorb(input);
+    pub fn update(&mut self, input: VestaInput) -> HasherResult<()> {
+        self.inner.absorb(input)
     }
     
     /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> ark_vesta::Fq {
+    pub fn squeeze(&mut self) -> HasherResult<ark_vesta::Fq> {
         self.inner.squeeze()
     }
 }
@@ -93,12 +93,12 @@ impl BN254Hasher {
     }
     
     /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BN254Input) {
-        self.inner.absorb(input);
+    pub fn update(&mut self, input: BN254Input) -> HasherResult<()> {
+        self.inner.absorb(input)
     }
     
     /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> ark_bn254::Fq {
+    pub fn squeeze(&mut self) -> HasherResult<ark_bn254::Fq> {
         self.inner.squeeze()
     }
 }
@@ -128,12 +128,12 @@ impl BLS12_381Hasher {
     }
     
     /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BLS12_381Input) {
-        self.inner.absorb(input);
+    pub fn update(&mut self, input: BLS12_381Input) -> HasherResult<()> {
+        self.inner.absorb(input)
     }
     
     /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> ark_bls12_381::Fq {
+    pub fn squeeze(&mut self) -> HasherResult<ark_bls12_381::Fq> {
         self.inner.squeeze()
     }
 }
@@ -163,12 +163,12 @@ impl BLS12_377Hasher {
     }
     
     /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BLS12_377Input) {
-        self.inner.absorb(input);
+    pub fn update(&mut self, input: BLS12_377Input) -> HasherResult<()> {
+        self.inner.absorb(input)
     }
     
     /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> ark_bls12_377::Fq {
+    pub fn squeeze(&mut self) -> HasherResult<ark_bls12_377::Fq> {
         self.inner.squeeze()
     }
 }

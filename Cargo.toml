@@ -23,6 +23,7 @@ ark-ff = "0.5"
 ark-ec = "0.5"
 num-bigint = "0.4"
 lazy_static = "1.4"
+thiserror = "1.0"
 
 [dev-dependencies]
 
@@ -31,3 +32,6 @@ name = "basic_usage"
 
 [[example]]
 name = "multi_curve"
+
+[[example]]
+name = "error_demo"

@@ -30,10 +30,10 @@ fn demo_pallas() {
     let scalar = ark_pallas::Fr::from(42u64);
     let base = ark_pallas::Fq::from(100u64);
     
-    hasher.update(PallasInput::ScalarField(scalar));
-    hasher.update(PallasInput::BaseField(base));
+    hasher.update(PallasInput::ScalarField(scalar)).expect("Failed to update hasher");
+    hasher.update(PallasInput::BaseField(base)).expect("Failed to update hasher");
     
-    let hash = hasher.squeeze();
+    let hash = hasher.squeeze().expect("Failed to compute hash");
     println!("  • Hash result: {}\n", hash.to_string().chars().take(40).collect::<String>() + "...");
 }
 
@@ -48,11 +48,11 @@ fn demo_bn254() {
     let base = ark_bn254::Fq::from(100u64);
     let generator = ark_bn254::G1Affine::generator();
     
-    hasher.update(BN254Input::ScalarField(scalar));
-    hasher.update(BN254Input::BaseField(base));
-    hasher.update(BN254Input::CurvePoint(generator));
+    hasher.update(BN254Input::ScalarField(scalar)).expect("Failed to update hasher");
+    hasher.update(BN254Input::BaseField(base)).expect("Failed to update hasher");
+    hasher.update(BN254Input::CurvePoint(generator)).expect("Failed to update hasher");
     
-    let hash = hasher.squeeze();
+    let hash = hasher.squeeze().expect("Failed to compute hash");
     println!("  • Hash result: {}\n", hash.to_string().chars().take(40).collect::<String>() + "...");
 }
 
@@ -67,10 +67,10 @@ fn demo_bls12_381() {
     let scalar = ark_bls12_381::Fr::from(42u64);
     let base = ark_bls12_381::Fq::from(100u64);
     
-    hasher.update(BLS12_381Input::ScalarField(scalar));
-    hasher.update(BLS12_381Input::BaseField(base));
+    hasher.update(BLS12_381Input::ScalarField(scalar)).expect("Failed to update hasher");
+    hasher.update(BLS12_381Input::BaseField(base)).expect("Failed to update hasher");
     
-    let hash = hasher.squeeze();
+    let hash = hasher.squeeze().expect("Failed to compute hash");
     println!("  • Hash result: {}\n", hash.to_string().chars().take(40).collect::<String>() + "...");
 }
 
