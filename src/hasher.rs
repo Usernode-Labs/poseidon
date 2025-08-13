@@ -1,7 +1,34 @@
 //! Generic multi-field Poseidon hasher implementation.
 //!
-//! This module provides a type-safe, generic hasher that can work with any
-//! elliptic curve and automatically handles field conversions.
+//! This module provides the core [`MultiFieldHasher`] that can work with any elliptic curve
+//! and automatically handles field conversions between different field types (Fr, Fq, curve points).
+//! 
+//! ## Features
+//!
+//! - **Safe numeric conversions** - Uses `try_from()` instead of unsafe casts
+//! - **Comprehensive error handling** - Cascades underlying [`PoseidonError`] with full context
+//! - **Proper hash chaining** - Ensures all inputs affect the final hash result
+//! - **Multiple field support** - Handles Fr ↔ Fq conversion with different bit sizes
+//!
+//! ## Usage
+//!
+//! Most users should use the curve-specific hashers from [`crate::types`] instead of this
+//! generic implementation directly. However, this module is useful for:
+//! - Library authors who need to be generic over curves
+//! - Advanced users who want maximum flexibility
+//! - Understanding the underlying implementation
+//!
+//! ```rust
+//! use poseidon_hash::hasher::{MultiFieldHasher, FieldInput, HasherResult};
+//! use poseidon_hash::parameters::pallas::PALLAS_PARAMS;
+//!
+//! let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> = 
+//!     MultiFieldHasher::new_from_ref(&*PALLAS_PARAMS);
+//!     
+//! hasher.absorb(FieldInput::ScalarField(ark_pallas::Fr::from(42u64)))?;
+//! let hash = hasher.squeeze()?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use ark_ff::{PrimeField, BigInteger, Zero};
 use light_poseidon::{Poseidon, PoseidonHasher, PoseidonError};

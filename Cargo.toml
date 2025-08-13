@@ -3,11 +3,11 @@ name = "poseidon-hash"
 version = "0.1.0"
 edition = "2024"
 authors = ["Your Name <your.email@example.com>"]
-description = "Generic multi-field Poseidon hash implementation for elliptic curves"
+description = "Production-ready, type-safe Poseidon hash implementation with comprehensive error handling and multi-curve support"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/yourusername/poseidon-hash"
 keywords = ["poseidon", "hash", "cryptography", "zk-snark", "elliptic-curves"]
-categories = ["cryptography", "no-std"]
+categories = ["cryptography", "algorithms"]
 
 [lib]
 name = "poseidon_hash"
