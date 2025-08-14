@@ -75,9 +75,13 @@ pub trait InnerHasher<F, I>
 where
     F: PrimeField,
 {
+    /// Update the hasher with a field input
     fn update_field_input(&mut self, input: I) -> HasherResult<()>;
+    /// Compute the hash digest
     fn digest_result(&mut self) -> HasherResult<F>;
+    /// Reset the hasher state
     fn reset_hasher(&mut self);
+    /// Get the current element count
     fn get_element_count(&self) -> usize;
 }
 

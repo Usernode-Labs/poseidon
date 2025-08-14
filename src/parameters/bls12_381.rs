@@ -230,7 +230,7 @@ lazy_static! {
         for hex_str in ROUND_CONSTANTS.iter() {
             let cleaned = hex_str.trim_start_matches("0x");
             let big_int = BigUint::parse_bytes(cleaned.as_bytes(), 16)
-                .expect("Failed to parse round constant");
+                .expect("Failed to parse round constant - embedded parameter should be valid");
             ark.push(ark_bls12_381::Fq::from(big_int));
         }
         
@@ -241,7 +241,7 @@ lazy_static! {
             for hex_str in row.iter() {
                 let cleaned = hex_str.trim_start_matches("0x");
                 let big_int = BigUint::parse_bytes(cleaned.as_bytes(), 16)
-                    .expect("Failed to parse MDS matrix element");
+                    .expect("Failed to parse MDS matrix element - embedded parameter should be valid");
                 mds_row.push(ark_bls12_381::Fq::from(big_int));
             }
             mds.push(mds_row);

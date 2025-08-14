@@ -54,7 +54,10 @@ pub enum HasherError {
     PointConversionFailed,
     /// Numeric conversion failed (overflow or underflow)
     #[error("Numeric conversion failed: {reason}")]
-    NumericConversionFailed { reason: String },
+    NumericConversionFailed { 
+        /// Description of the specific conversion failure
+        reason: String 
+    },
 }
 
 /// Result type for hasher operations.

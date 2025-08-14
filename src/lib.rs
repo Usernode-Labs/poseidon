@@ -1,19 +1,19 @@
 /*!
-# Poseidon Hash Library 🔐
+# Poseidon Hash Library
 
 A production-ready, type-safe Rust implementation of the Poseidon hash function with 
 comprehensive error handling and support for multiple elliptic curves.
 
 ## Features
 
-- 🎯 **Type-safe curve-specific hashers** - Embedded parameters prevent parameter mix-ups at compile time
-- 🔧 **Multi-field input support** - Hash base field (Fq), scalar field (Fr), and curve point elements seamlessly
-- ⚡ **Automatic field conversion** - Sophisticated Fr ↔ Fq conversion handling different field bit sizes safely
-- 🛡️ **Comprehensive error handling** - Proper error cascading with actionable error messages using `thiserror`
-- 📦 **Embedded parameters** - Zero external dependencies, parameters compiled directly into the binary
-- 🚀 **Zero-copy design** - Efficient memory usage with lazy static parameters
-- ✅ **Production-ready** - Extensive testing, proper error handling, and Rust best practices
-- 🔒 **Cryptographically secure** - Official Poseidon parameters with 128-bit security level
+- **Type-safe curve-specific hashers** - Embedded parameters prevent parameter mix-ups at compile time
+- **Multi-field input support** - Hash base field (Fq), scalar field (Fr), and curve point elements seamlessly
+- **Automatic field conversion** - Sophisticated Fr ↔ Fq conversion handling different field bit sizes safely
+- **Comprehensive error handling** - Proper error cascading with actionable error messages using `thiserror`
+- **Embedded parameters** - Zero external dependencies, parameters compiled directly into the binary
+- **Zero-copy design** - Efficient memory usage with lazy static parameters
+- **Production-ready** - Extensive testing, proper error handling, and best practices
+- **Cryptographically secure** - Official Poseidon parameters with 128-bit security level
 
 ## Quick Start
 
@@ -21,17 +21,15 @@ comprehensive error handling and support for multiple elliptic curves.
 use poseidon_hash::prelude::*;
 use ark_ec::AffineRepr;
 
-// Create hasher with embedded parameters - no manual parameter passing needed!
+// Create hasher with embedded parameters
 let mut hasher = PallasHasher::new();
 
-// Hash different field types with proper error handling
-let scalar = ark_pallas::Fr::from(42u64);
-let base = ark_pallas::Fq::from(100u64);
-let point = ark_pallas::Affine::generator();
-
-hasher.update(PallasInput::ScalarField(scalar))?;
-hasher.update(PallasInput::BaseField(base))?;
-hasher.update(PallasInput::CurvePoint(point))?;
+// Direct ergonomic API - no enum wrapping needed
+hasher.update(ark_pallas::Fr::from(42u64))?;        // scalar field
+hasher.update(ark_pallas::Fq::from(100u64))?;       // base field  
+hasher.update(ark_pallas::Affine::generator())?;     // curve point
+hasher.update(42u64)?;                               // primitive
+hasher.update("hello")?;                            // string
 
 let hash = hasher.digest()?;
 println!("Hash: {}", hash);
@@ -44,7 +42,7 @@ println!("Hash: {}", hash);
 use poseidon_hash::prelude::*;
 
 let mut hasher = PallasHasher::new();
-hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)))?;
+hasher.update(ark_pallas::Fq::from(42u64))?;
 
 match hasher.digest() {
     Ok(hash) => println!("Success: {}", hash),
@@ -63,17 +61,21 @@ match hasher.digest() {
 
 ## Type Safety
 
-Each curve hasher embeds its own parameters, preventing accidental parameter mix-ups:
+Each curve hasher embeds its own parameters and field types:
 
 ```rust
 use poseidon_hash::prelude::*;
 
-// ✅ Type-safe - each hasher has embedded parameters
-let mut pallas_hasher = PallasHasher::new();  // Pallas parameters embedded
-let mut bn254_hasher = BN254Hasher::new();    // BN254 parameters embedded
+let mut pallas_hasher = PallasHasher::new();  // Pallas parameters
+let mut bn254_hasher = BN254Hasher::new();    // BN254 parameters
 
-// ❌ Compile error - cannot mix field types across curves
-// pallas_hasher.update(BN254Input::ScalarField(ark_bn254::Fr::from(123u64)))?;
+// Each hasher only accepts its own curve's field types
+pallas_hasher.update(ark_pallas::Fr::from(123u64))?;  // ✓ Pallas scalar
+bn254_hasher.update(ark_bn254::Fr::from(123u64))?;    // ✓ BN254 scalar
+
+// Mixing field types across curves won't compile:
+// pallas_hasher.update(ark_bn254::Fr::from(123u64))?;  // ✗ Type error
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 */
 
@@ -86,7 +88,19 @@ pub mod parameters;
 pub mod primitive;
 pub mod types;
 
-// Re-export commonly used types
+/// Commonly used types and traits for easy importing.
+/// 
+/// Import this module to get access to all the essential types needed for most use cases:
+/// 
+/// ```rust
+/// use poseidon_hash::prelude::*;
+/// 
+/// // Now you can use curve-specific hashers directly
+/// let mut hasher = PallasHasher::new();
+/// hasher.update(42u64)?;
+/// let hash = hasher.digest()?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub mod prelude {
     pub use crate::hasher::{MultiFieldHasher, FieldInput, HasherError, HasherResult};
     pub use crate::parameters::SECURITY_LEVEL;
