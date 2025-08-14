@@ -8,6 +8,7 @@ use crate::hasher::{MultiFieldHasher, FieldInput, HasherResult};
 use crate::parameters::*;
 use crate::primitive::{RustInput, PackingConfig};
 use ark_ff::PrimeField;
+use zeroize::ZeroizeOnDrop;
 
 /// Trait for curve-specific Poseidon hashers with primitive type support.
 /// 
@@ -30,6 +31,12 @@ where
     #[doc(hidden)]
     fn inner_mut(&mut self) -> &mut dyn InnerHasher<F, I>;
     
+    /// Get an immutable reference to the inner MultiFieldHasher for delegation.
+    /// This is an implementation detail and should not be used directly.
+    /// Only trait implementations should provide this method.
+    #[doc(hidden)]
+    fn inner_ref(&self) -> &dyn InnerHasher<F, I>;
+    
     /// Update the hasher with a field-specific input (Fr, Fq, or curve points).
     fn update(&mut self, input: I) -> HasherResult<()> {
         self.inner_mut().absorb_field_input(input)
@@ -44,17 +51,30 @@ where
     fn squeeze(&mut self) -> HasherResult<F> {
         self.inner_mut().squeeze_result()
     }
+    
+    /// Reset the hasher state without changing parameters.
+    /// This method securely clears all sensitive data from memory.
+    fn reset(&mut self) {
+        self.inner_mut().reset_hasher()
+    }
+    
+    /// Returns the current number of absorbed elements.
+    fn absorbed_count(&self) -> usize {
+        self.inner_ref().get_absorbed_count()
+    }
 }
 
 /// Internal trait to abstract over the MultiFieldHasher operations.
 /// This allows us to provide default implementations in PoseidonHasher.
-trait InnerHasher<F, I>
+pub trait InnerHasher<F, I>
 where
     F: PrimeField,
 {
     fn absorb_field_input(&mut self, input: I) -> HasherResult<()>;
     fn absorb_primitive_input(&mut self, input: RustInput) -> HasherResult<()>;
     fn squeeze_result(&mut self) -> HasherResult<F>;
+    fn reset_hasher(&mut self);
+    fn get_absorbed_count(&self) -> usize;
 }
 
 // Implement InnerHasher for MultiFieldHasher to enable delegation
@@ -75,11 +95,22 @@ where
     fn squeeze_result(&mut self) -> HasherResult<F> {
         self.squeeze()
     }
+    
+    fn reset_hasher(&mut self) {
+        self.reset()
+    }
+    
+    fn get_absorbed_count(&self) -> usize {
+        self.absorbed_count()
+    }
 }
 
 // Pallas curve hasher
 /// Pallas curve multi-field hasher with embedded parameters.
 /// Pallas is a 255-bit curve used in the Mina Protocol for recursive SNARKs.
+/// 
+/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
+#[derive(ZeroizeOnDrop)]
 pub struct PallasHasher {
     inner: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>,
 }
@@ -100,6 +131,10 @@ impl PoseidonHasher<ark_pallas::Fq, PallasInput> for PallasHasher {
     fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_pallas::Fq, PallasInput> {
         &mut self.inner
     }
+    
+    fn inner_ref(&self) -> &dyn InnerHasher<ark_pallas::Fq, PallasInput> {
+        &self.inner
+    }
 }
 
 impl Default for PallasHasher {
@@ -114,6 +149,9 @@ pub type PallasInput = FieldInput<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Af
 // Vesta curve hasher
 /// Vesta curve multi-field hasher with embedded parameters.
 /// Vesta forms a cycle with Pallas for efficient recursive proofs.
+/// 
+/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
+#[derive(ZeroizeOnDrop)]
 pub struct VestaHasher {
     inner: MultiFieldHasher<ark_vesta::Fq, ark_vesta::Fr, ark_vesta::Affine>,
 }
@@ -134,6 +172,10 @@ impl PoseidonHasher<ark_vesta::Fq, VestaInput> for VestaHasher {
     fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_vesta::Fq, VestaInput> {
         &mut self.inner
     }
+    
+    fn inner_ref(&self) -> &dyn InnerHasher<ark_vesta::Fq, VestaInput> {
+        &self.inner
+    }
 }
 
 impl Default for VestaHasher {
@@ -148,6 +190,9 @@ pub type VestaInput = FieldInput<ark_vesta::Fq, ark_vesta::Fr, ark_vesta::Affine
 // BN254 curve hasher
 /// BN254 curve multi-field hasher with embedded parameters.
 /// BN254 is widely used in Ethereum and zkSNARK applications.
+/// 
+/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
+#[derive(ZeroizeOnDrop)]
 pub struct BN254Hasher {
     inner: MultiFieldHasher<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>,
 }
@@ -168,6 +213,10 @@ impl PoseidonHasher<ark_bn254::Fq, BN254Input> for BN254Hasher {
     fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bn254::Fq, BN254Input> {
         &mut self.inner
     }
+    
+    fn inner_ref(&self) -> &dyn InnerHasher<ark_bn254::Fq, BN254Input> {
+        &self.inner
+    }
 }
 
 impl Default for BN254Hasher {
@@ -182,6 +231,9 @@ pub type BN254Input = FieldInput<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affi
 // BLS12-381 curve hasher
 /// BLS12-381 curve multi-field hasher with embedded parameters.
 /// BLS12-381 is used in Ethereum 2.0 and Zcash.
+/// 
+/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
+#[derive(ZeroizeOnDrop)]
 pub struct BLS12_381Hasher {
     inner: MultiFieldHasher<ark_bls12_381::Fq, ark_bls12_381::Fr, ark_bls12_381::G1Affine>,
 }
@@ -202,6 +254,10 @@ impl PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input> for BLS12_381Hasher {
     fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bls12_381::Fq, BLS12_381Input> {
         &mut self.inner
     }
+    
+    fn inner_ref(&self) -> &dyn InnerHasher<ark_bls12_381::Fq, BLS12_381Input> {
+        &self.inner
+    }
 }
 
 impl Default for BLS12_381Hasher {
@@ -216,6 +272,9 @@ pub type BLS12_381Input = FieldInput<ark_bls12_381::Fq, ark_bls12_381::Fr, ark_b
 // BLS12-377 curve hasher
 /// BLS12-377 curve multi-field hasher with embedded parameters.
 /// BLS12-377 is used in Celo and forms cycles with BW6-761.
+/// 
+/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
+#[derive(ZeroizeOnDrop)]
 pub struct BLS12_377Hasher {
     inner: MultiFieldHasher<ark_bls12_377::Fq, ark_bls12_377::Fr, ark_bls12_377::G1Affine>,
 }
@@ -235,6 +294,10 @@ impl PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input> for BLS12_377Hasher {
     
     fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bls12_377::Fq, BLS12_377Input> {
         &mut self.inner
+    }
+    
+    fn inner_ref(&self) -> &dyn InnerHasher<ark_bls12_377::Fq, BLS12_377Input> {
+        &self.inner
     }
 }
 

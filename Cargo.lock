@@ -372,6 +372,7 @@ dependencies = [
  "light-poseidon",
  "num-bigint",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]

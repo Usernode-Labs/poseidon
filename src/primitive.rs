@@ -39,6 +39,7 @@
 use ark_ff::PrimeField;
 use crate::hasher::HasherResult;
 use std::collections::VecDeque;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Configuration for packing basic Rust types into field elements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,12 +132,17 @@ impl RustInput {
 }
 
 /// Buffer for accumulating bytes before packing into field elements.
+/// 
+/// This buffer may contain sensitive input data and implements `ZeroizeOnDrop`
+/// to ensure that cryptographic material is securely cleared from memory.
 pub struct PackingBuffer {
     /// Accumulated bytes waiting to be packed
+    /// 
+    /// This may contain sensitive data and will be zeroized on drop.
     bytes: VecDeque<u8>,
-    /// Configuration for packing behavior
+    /// Configuration for packing behavior (no sensitive data)
     config: PackingConfig,
-    /// Maximum bytes per field element (calculated from field size)
+    /// Maximum bytes per field element (calculated from field size, no sensitive data)
     max_bytes_per_field: usize,
 }
 
@@ -305,7 +311,14 @@ impl PackingBuffer {
     }
     
     /// Clear all bytes from the buffer.
+    /// 
+    /// This method securely zeroizes the buffer contents to prevent sensitive
+    /// data from remaining in memory.
     pub fn clear(&mut self) {
+        // Zeroize the contents before clearing to ensure secure deletion
+        for byte in self.bytes.iter_mut() {
+            byte.zeroize();
+        }
         self.bytes.clear();
     }
 }
@@ -333,6 +346,20 @@ pub fn serialize_rust_input(input: &RustInput, buffer: &mut PackingBuffer) -> Ha
         }
     }
     Ok(())
+}
+
+// Manual implementation of ZeroizeOnDrop for PackingBuffer
+// since VecDeque doesn't implement Zeroize automatically
+impl ZeroizeOnDrop for PackingBuffer {}
+
+impl Drop for PackingBuffer {
+    fn drop(&mut self) {
+        // Manually zeroize the VecDeque contents
+        for byte in self.bytes.iter_mut() {
+            byte.zeroize();
+        }
+        self.bytes.clear();
+    }
 }
 
 #[cfg(test)]

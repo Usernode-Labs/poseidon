@@ -35,6 +35,7 @@ use light_poseidon::{Poseidon, PoseidonHasher, PoseidonError};
 use ark_ec::AffineRepr;
 use std::marker::PhantomData;
 use thiserror::Error;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::primitive::{RustInput, PackingBuffer, PackingConfig, serialize_rust_input};
 
 /// Number of bits per byte
@@ -76,21 +77,39 @@ pub enum FieldInput<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> 
 /// This generic hasher can work with any elliptic curve and automatically handles
 /// conversion between different field types within the same curve's ecosystem.
 ///
+/// # Security
+///
+/// This struct implements `ZeroizeOnDrop` to ensure that sensitive cryptographic data
+/// (field elements, internal state) is securely cleared from memory when the hasher
+/// is dropped, protecting against memory analysis attacks.
+///
 /// # Type Parameters
 ///
 /// * `F: PrimeField + Zero` - Base field (Fq) used for curve coordinates and final hash output
 /// * `S: PrimeField` - Scalar field (Fr) used for private keys and discrete logarithms  
 /// * `G: AffineRepr<BaseField = F>` - Curve points in affine representation
+#[derive(ZeroizeOnDrop)]
 pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> {
     /// Poseidon hasher instance parameterized over the base field F
+    /// 
+    /// Note: This contains cryptographic parameters that are public and don't need zeroization.
+    /// The internal state of the Poseidon hasher may contain sensitive data, but we can't
+    /// control its zeroization directly as it's from an external crate.
+    #[zeroize(skip)]
     poseidon: Poseidon<F>,
     /// Internal state accumulating base field elements for hashing
+    /// 
+    /// This contains sensitive cryptographic data and will be zeroized on drop.
     state: Vec<F>,
     /// Buffer for accumulating primitive types before packing into field elements
+    /// 
+    /// This may contain sensitive input data and will be zeroized on drop.
     primitive_buffer: PackingBuffer,
     /// Phantom data to track scalar field type S without storing instances
+    #[zeroize(skip)]
     _phantom_s: PhantomData<S>,
     /// Phantom data to track curve point type G without storing instances  
+    #[zeroize(skip)]
     _phantom_g: PhantomData<G>,
 }
 
@@ -292,7 +311,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
         if self.state.len() == 2 {
             // Simple case: just hash the two elements
             let result = self.poseidon.hash(&[self.state[0], self.state[1]])?;
-            self.state.clear();
+            self.state.zeroize();
             return Ok(result);
         }
         
@@ -304,15 +323,17 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
             result = self.poseidon.hash(&[result, self.state[i]])?;
         }
 
-        // Clear state for next use
-        self.state.clear();
+        // Securely clear state for next use
+        self.state.zeroize();
         Ok(result)
     }
 
     /// Resets the hasher state without changing parameters.
+    /// 
+    /// This method securely clears all sensitive data from memory using zeroization.
     pub fn reset(&mut self) {
-        self.state.clear();
-        self.primitive_buffer.clear();
+        self.state.zeroize();
+        self.primitive_buffer.clear(); // Now uses secure zeroization internally
     }
 
     /// Returns the current number of absorbed elements.

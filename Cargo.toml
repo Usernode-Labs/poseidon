@@ -24,6 +24,7 @@ ark-ec = "0.5"
 num-bigint = "0.4"
 lazy_static = "1.4"
 thiserror = "1.0"
+zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 
