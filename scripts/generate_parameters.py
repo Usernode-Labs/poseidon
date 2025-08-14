@@ -75,7 +75,7 @@ alpha = {ALPHA}
 M = {M}
 
 # Run the parameter generation script
-load('generate_params_poseidon.sage')
+load('/home/sage/work/scripts/generate_params_poseidon.sage')
 """
     
     # Write temporary script
@@ -310,7 +310,7 @@ def check_docker():
 
 def check_sage_script():
     """Check if the SageMath script exists."""
-    return os.path.exists('generate_params_poseidon.sage')
+    return os.path.exists('scripts/generate_params_poseidon.sage')
 
 
 def main():
