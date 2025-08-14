@@ -9,12 +9,12 @@ fn test_primitive_bool_hashing() {
     
     // Test single boolean
     hasher.update(true);
-    let hash1 = hasher.digest().expect("Failed to digest hash");
+    let hash1 = hasher.digest();
     assert_ne!(hash1, ark_pallas::Fq::zero());
     
     // Test different boolean value should produce different hash
     hasher.update(false);
-    let hash2 = hasher.digest().expect("Failed to digest hash");
+    let hash2 = hasher.digest();
     assert_ne!(hash1, hash2);
 }
 
@@ -28,7 +28,7 @@ fn test_primitive_integer_hashing() {
     hasher.update(100000u32);
     hasher.update(10000000000u64);
     
-    let hash = hasher.digest().expect("Failed to digest hash");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
 
@@ -42,7 +42,7 @@ fn test_primitive_signed_integer_hashing() {
     hasher.update(-100000i32);
     hasher.update(-10000000000i64);
     
-    let hash = hasher.digest().expect("Failed to digest hash");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_pallas::Fq::zero());
     
     // Test that positive and negative of same value produce different hashes
@@ -52,8 +52,8 @@ fn test_primitive_signed_integer_hashing() {
     hasher1.update(42i32);
     hasher2.update(-42i32);
     
-    let hash1 = hasher1.digest().expect("Failed to digest hash");
-    let hash2 = hasher2.digest().expect("Failed to digest hash");
+    let hash1 = hasher1.digest();
+    let hash2 = hasher2.digest();
     assert_ne!(hash1, hash2);
 }
 
@@ -63,17 +63,17 @@ fn test_primitive_string_hashing() {
     
     // Test string slice
     hasher.update("hello world");
-    let hash1 = hasher.digest().expect("Failed to digest hash");
+    let hash1 = hasher.digest();
     assert_ne!(hash1, ark_pallas::Fq::zero());
     
     // Test owned string
     hasher.update("goodbye world".to_string());
-    let hash2 = hasher.digest().expect("Failed to digest hash");
+    let hash2 = hasher.digest();
     assert_ne!(hash1, hash2);
     
     // Test empty string
     hasher.update("");
-    let hash3 = hasher.digest().expect("Failed to digest hash");
+    let hash3 = hasher.digest();
     assert_ne!(hash3, ark_pallas::Fq::zero());
 }
 
@@ -84,13 +84,13 @@ fn test_primitive_bytes_hashing() {
     // Test byte slice
     let bytes = [1, 2, 3, 4, 5, 255, 0, 128];
     hasher.update(bytes.to_vec());
-    let hash1 = hasher.digest().expect("Failed to digest hash");
+    let hash1 = hasher.digest();
     assert_ne!(hash1, ark_pallas::Fq::zero());
     
     // Test different byte slice should produce different hash
     let bytes2 = [1, 2, 3, 4, 5, 254, 0, 128]; // Changed one byte
     hasher.update(bytes2.to_vec());
-    let hash2 = hasher.digest().expect("Failed to digest hash");
+    let hash2 = hasher.digest();
     assert_ne!(hash1, hash2);
 }
 
@@ -104,7 +104,7 @@ fn test_primitive_enum_api() {
     hasher.update("test".to_string());
     hasher.update(vec![1, 2, 3]);
     
-    let hash = hasher.digest().expect("Failed to digest hash");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
 
@@ -121,7 +121,7 @@ fn test_mixed_field_and_primitive_types() {
     hasher.update(PallasInput::BaseField(base));
     hasher.update("mixed");
     
-    let hash = hasher.digest().expect("Failed to digest hash");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
 
@@ -142,8 +142,8 @@ fn test_byte_efficient_vs_circuit_friendly_modes() {
     hasher_byte_efficient.update(vec![1, 2, 3, 4, 5]);
     hasher_circuit_friendly.update(vec![1, 2, 3, 4, 5]);
     
-    let hash_byte_efficient = hasher_byte_efficient.digest().expect("Failed to digest byte efficient hash");
-    let hash_circuit_friendly = hasher_circuit_friendly.digest().expect("Failed to digest circuit friendly hash");
+    let hash_byte_efficient = hasher_byte_efficient.digest();
+    let hash_circuit_friendly = hasher_circuit_friendly.digest();
     
     // Different packing modes should produce different hashes for the same input
     assert_ne!(hash_byte_efficient, hash_circuit_friendly);
@@ -163,8 +163,8 @@ fn test_deterministic_hashing() {
         hasher1.update(input);
         hasher2.update(input);
         
-        let hash1 = hasher1.digest().expect("Failed to digest");
-        let hash2 = hasher2.digest().expect("Failed to digest");
+        let hash1 = hasher1.digest();
+        let hash2 = hasher2.digest();
         
         assert_eq!(hash1, hash2, "Bool hashes should be deterministic");
     }
@@ -178,8 +178,8 @@ fn test_deterministic_hashing() {
         hasher1.update(input);
         hasher2.update(input);
         
-        let hash1 = hasher1.digest().expect("Failed to digest");
-        let hash2 = hasher2.digest().expect("Failed to digest");
+        let hash1 = hasher1.digest();
+        let hash2 = hasher2.digest();
         
         assert_eq!(hash1, hash2, "U64 hashes should be deterministic");
     }
@@ -193,8 +193,8 @@ fn test_deterministic_hashing() {
         hasher1.update(input);
         hasher2.update(input);
         
-        let hash1 = hasher1.digest().expect("Failed to digest");
-        let hash2 = hasher2.digest().expect("Failed to digest");
+        let hash1 = hasher1.digest();
+        let hash2 = hasher2.digest();
         
         assert_eq!(hash1, hash2, "I64 hashes should be deterministic");
     }
@@ -208,8 +208,8 @@ fn test_deterministic_hashing() {
         hasher1.update(input.clone());
         hasher2.update(input);
         
-        let hash1 = hasher1.digest().expect("Failed to digest");
-        let hash2 = hasher2.digest().expect("Failed to digest");
+        let hash1 = hasher1.digest();
+        let hash2 = hasher2.digest();
         
         assert_eq!(hash1, hash2, "String hashes should be deterministic");
     }
@@ -223,8 +223,8 @@ fn test_deterministic_hashing() {
         hasher1.update(input.clone());
         hasher2.update(input);
         
-        let hash1 = hasher1.digest().expect("Failed to digest");
-        let hash2 = hasher2.digest().expect("Failed to digest");
+        let hash1 = hasher1.digest();
+        let hash2 = hasher2.digest();
         
         assert_eq!(hash1, hash2, "Bytes hashes should be deterministic");
     }
@@ -237,12 +237,12 @@ fn test_hasher_reuse_after_digest() {
     
     // First hash
     hasher.update(100u64);
-    let hash1 = hasher.finalize().expect("Failed to finalize first hash");
+    let hash1 = hasher.finalize();
     
     // Create new hasher for second hash
     let mut hasher2 = PallasHasher::new();
     hasher2.update(200u64);
-    let hash2 = hasher2.finalize().expect("Failed to finalize second hash");
+    let hash2 = hasher2.finalize();
     
     // Should produce different hashes
     assert_ne!(hash1, hash2);
@@ -250,7 +250,7 @@ fn test_hasher_reuse_after_digest() {
     // Third hash with same input as first should match first hash
     let mut hasher3 = PallasHasher::new();
     hasher3.update(100u64);
-    let hash3 = hasher3.finalize().expect("Failed to finalize third hash");
+    let hash3 = hasher3.finalize();
     
     assert_eq!(hash1, hash3);
 }
@@ -267,7 +267,7 @@ fn test_large_data_handling() {
     let large_bytes: Vec<u8> = (0..1000).map(|i| (i % 256) as u8).collect();
     hasher.update(large_bytes);
     
-    let hash = hasher.digest().expect("Failed to digest hash for large data");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
 
@@ -285,7 +285,7 @@ fn test_edge_cases() {
     hasher.update(i64::MAX);
     hasher.update(i64::MIN);
     
-    let hash = hasher.digest().expect("Failed to digest hash for edge cases");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
 
@@ -297,7 +297,7 @@ fn test_empty_inputs() {
     hasher.update("");
     hasher.update(Vec::<u8>::new());
     
-    let hash = hasher.digest().expect("Failed to digest hash for empty inputs");
+    let hash = hasher.digest();
     // Even empty inputs should produce a non-zero hash due to length prefixes
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
@@ -317,8 +317,8 @@ fn test_order_dependency() {
     hasher2.update(2u64);
     hasher2.update(1u64);
     
-    let hash1 = hasher1.digest().expect("Failed to digest hash1");
-    let hash2 = hasher2.digest().expect("Failed to digest hash2");
+    let hash1 = hasher1.digest();
+    let hash2 = hasher2.digest();
     
     assert_ne!(hash1, hash2, "Different input order should produce different hashes");
 }

@@ -25,38 +25,26 @@ use ark_ec::AffineRepr;
 let mut hasher = PallasHasher::new();
 
 // Direct ergonomic API - no enum wrapping needed
-hasher.update(ark_pallas::Fr::from(42u64))?;        // scalar field
-hasher.update(ark_pallas::Fq::from(100u64))?;       // base field  
-hasher.update(ark_pallas::Affine::generator())?;     // curve point
-hasher.update(42u64)?;                               // primitive
-hasher.update("hello")?;                            // string
+hasher.update(ark_pallas::Fr::from(42u64));        // scalar field
+hasher.update(ark_pallas::Fq::from(100u64));       // base field  
+hasher.update(ark_pallas::Affine::generator());     // curve point
+hasher.update(42u64);                               // primitive
+hasher.update("hello");                            // string
 
-let hash = hasher.digest()?;
+let hash = hasher.digest();
 println!("Hash: {}", hash);
-# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-## Error Handling
+## Simple API
 
 ```rust
 use poseidon_hash::prelude::*;
 
 let mut hasher = PallasHasher::new();
-hasher.update(ark_pallas::Fq::from(42u64))?;
+hasher.update(ark_pallas::Fq::from(42u64));
 
-match hasher.digest() {
-    Ok(hash) => println!("Success: {}", hash),
-    Err(HasherError::PoseidonError(poseidon_err)) => {
-        eprintln!("Detailed Poseidon error: {}", poseidon_err);
-    },
-    Err(HasherError::PointConversionFailed) => {
-        eprintln!("Failed to extract curve point coordinates");
-    },
-    Err(HasherError::NumericConversionFailed { reason }) => {
-        eprintln!("Numeric conversion failed: {}", reason);
-    }
-}
-# Ok::<(), Box<dyn std::error::Error>>(())
+let hash = hasher.digest();
+println!("Hash: {}", hash);
 ```
 
 ## Type Safety
@@ -70,12 +58,11 @@ let mut pallas_hasher = PallasHasher::new();  // Pallas parameters
 let mut bn254_hasher = BN254Hasher::new();    // BN254 parameters
 
 // Each hasher only accepts its own curve's field types
-pallas_hasher.update(ark_pallas::Fr::from(123u64))?;  // ✓ Pallas scalar
-bn254_hasher.update(ark_bn254::Fr::from(123u64))?;    // ✓ BN254 scalar
+pallas_hasher.update(ark_pallas::Fr::from(123u64));  // ✓ Pallas scalar
+bn254_hasher.update(ark_bn254::Fr::from(123u64));    // ✓ BN254 scalar
 
 // Mixing field types across curves won't compile:
-// pallas_hasher.update(ark_bn254::Fr::from(123u64))?;  // ✗ Type error
-# Ok::<(), Box<dyn std::error::Error>>(())
+// pallas_hasher.update(ark_bn254::Fr::from(123u64));  // ✗ Type error
 ```
 */
 
@@ -97,12 +84,11 @@ pub mod types;
 /// 
 /// // Now you can use curve-specific hashers directly
 /// let mut hasher = PallasHasher::new();
-/// hasher.update(42u64)?;
-/// let hash = hasher.digest()?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// hasher.update(42u64);
+/// let hash = hasher.digest();
 /// ```
 pub mod prelude {
-    pub use crate::hasher::{MultiFieldHasher, FieldInput, HasherError, HasherResult};
+    pub use crate::hasher::{MultiFieldHasher, FieldInput};
     pub use crate::parameters::SECURITY_LEVEL;
     pub use crate::primitive::{RustInput, PackingConfig, PackingMode, PaddingMode};
     pub use crate::types::PoseidonHasher;

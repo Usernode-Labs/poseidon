@@ -14,7 +14,7 @@ fn test_memory_zeroization() {
     let secret_data = ark_pallas::Fr::from(0xDEADBEEFu64);
     hasher.update(PallasInput::ScalarField(secret_data));
     
-    let _hash = hasher.digest().expect("Failed to digest");
+    let _hash = hasher.digest();
     
     // digest() now preserves state - use finalize() to consume
     assert!(hasher.element_count() > 0, "State should be preserved after digest");
@@ -22,7 +22,7 @@ fn test_memory_zeroization() {
     // Test finalize() consumes the hasher
     let mut hasher2 = PallasHasher::new();
     hasher2.update(PallasInput::ScalarField(secret_data));
-    let _final_hash = hasher2.finalize().expect("Failed to finalize"); // hasher2 is consumed here
+    let _final_hash = hasher2.finalize(); // hasher2 is consumed here
     
     hasher.update(PallasInput::ScalarField(secret_data));
     assert!(hasher.element_count() > 0, "Data was not added");
@@ -70,7 +70,7 @@ fn test_basic_timing_consistency() {
         
         let start = Instant::now();
         hasher.update(PallasInput::ScalarField(test_case));
-        let _hash = hasher.digest().expect("Failed to digest");
+        let _hash = hasher.digest();
         let duration = start.elapsed();
         
         timings.push(duration);
@@ -105,7 +105,7 @@ fn test_hash_determinism_security() {
         for _ in 0..10 {
             let mut hasher = PallasHasher::new();
             hasher.update(data);
-            let hash = hasher.digest().expect("Failed to digest");
+            let hash = hasher.digest();
             hashes.push(hash.to_string());
         }
         
@@ -120,7 +120,7 @@ fn test_hash_determinism_security() {
         for _ in 0..10 {
             let mut hasher = PallasHasher::new();
             hasher.update(data);
-            let hash = hasher.digest().expect("Failed to digest");
+            let hash = hasher.digest();
             hashes.push(hash.to_string());
         }
         
@@ -142,7 +142,7 @@ fn test_hash_determinism_security() {
         for _ in 0..10 {
             let mut hasher = PallasHasher::new();
             hasher.update(data.clone());
-            let hash = hasher.digest().expect("Failed to digest");
+            let hash = hasher.digest();
             hashes.push(hash.to_string());
         }
         
@@ -187,9 +187,9 @@ fn test_parameter_isolation_security() {
     pallas_hasher2.update(test_data);
     bn254_hasher.update(test_data);
     
-    let pallas_hash1 = pallas_hasher1.digest().expect("Failed to digest");
-    let pallas_hash2 = pallas_hasher2.digest().expect("Failed to digest");
-    let bn254_hash = bn254_hasher.digest().expect("Failed to digest");
+    let pallas_hash1 = pallas_hasher1.digest();
+    let pallas_hash2 = pallas_hasher2.digest();
+    let bn254_hash = bn254_hasher.digest();
     
     assert_eq!(pallas_hash1.to_string(), pallas_hash2.to_string(), 
               "Pallas hasher parameter isolation failed");
@@ -207,6 +207,6 @@ fn test_stack_overflow_protection() {
         hasher.update((i % 256) as u8);
     }
     
-    let hash = hasher.digest();
-    assert!(hash.is_ok(), "Failed to complete hash after many inputs");
+    let _hash = hasher.digest();
+    // Hash computation should complete successfully after many inputs
 }

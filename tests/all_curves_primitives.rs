@@ -8,7 +8,7 @@ fn test_pallas_primitives() {
     let mut hasher = PallasHasher::new();
     hasher.update(true);
     hasher.update(12345u64);
-    let hash = hasher.digest().expect("Failed to digest");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
 
@@ -17,7 +17,7 @@ fn test_vesta_primitives() {
     let mut hasher = VestaHasher::new();
     hasher.update(false);
     hasher.update(67890u64);
-    let hash = hasher.digest().expect("Failed to digest");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_vesta::Fq::zero());
 }
 
@@ -26,7 +26,7 @@ fn test_bn254_primitives() {
     let mut hasher = BN254Hasher::new();
     hasher.update(-123i32);
     hasher.update("bn254");
-    let hash = hasher.digest().expect("Failed to digest");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_bn254::Fq::zero());
 }
 
@@ -35,7 +35,7 @@ fn test_bls12_381_primitives() {
     let mut hasher = BLS12_381Hasher::new();
     hasher.update(999999999999u128);
     hasher.update(vec![1, 2, 3, 4]);
-    let hash = hasher.digest().expect("Failed to digest");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_bls12_381::Fq::zero());
 }
 
@@ -44,7 +44,7 @@ fn test_bls12_377_primitives() {
     let mut hasher = BLS12_377Hasher::new();
     hasher.update(-987654321i64);
     hasher.update("bls12_377".to_string());
-    let hash = hasher.digest().expect("Failed to digest");
+    let hash = hasher.digest();
     assert_ne!(hash, ark_bls12_377::Fq::zero());
 }
 
@@ -71,11 +71,11 @@ fn test_all_curves_with_config() {
     bls12_377.update(test_bytes.to_vec());
     
     // All should produce non-zero hashes
-    assert_ne!(pallas.digest().expect("Pallas digest failed"), ark_pallas::Fq::zero());
-    assert_ne!(vesta.digest().expect("Vesta digest failed"), ark_vesta::Fq::zero());
-    assert_ne!(bn254.digest().expect("BN254 digest failed"), ark_bn254::Fq::zero());
-    assert_ne!(bls12_381.digest().expect("BLS12-381 digest failed"), ark_bls12_381::Fq::zero());
-    assert_ne!(bls12_377.digest().expect("BLS12-377 digest failed"), ark_bls12_377::Fq::zero());
+    assert_ne!(pallas.digest(), ark_pallas::Fq::zero());
+    assert_ne!(vesta.digest(), ark_vesta::Fq::zero());
+    assert_ne!(bn254.digest(), ark_bn254::Fq::zero());
+    assert_ne!(bls12_381.digest(), ark_bls12_381::Fq::zero());
+    assert_ne!(bls12_377.digest(), ark_bls12_377::Fq::zero());
 }
 
 #[test]
@@ -91,9 +91,9 @@ fn test_cross_curve_different_hashes() {
     vesta.update(input);
     bn254.update(input);
     
-    let pallas_hash = pallas.digest().expect("Pallas digest failed");
-    let vesta_hash = vesta.digest().expect("Vesta digest failed");
-    let bn254_hash = bn254.digest().expect("BN254 digest failed");
+    let pallas_hash = pallas.digest();
+    let vesta_hash = vesta.digest();
+    let bn254_hash = bn254.digest();
     
     // Convert to string for comparison (different field types)
     let pallas_str = pallas_hash.to_string();

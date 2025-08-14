@@ -26,7 +26,7 @@ fn main() {
     hasher.update(vec![1u8, 2, 3, 4, 5, 255]);
     println!("  • Added bytes: [1, 2, 3, 4, 5, 255]");
     
-    let hash1 = hasher.digest().expect("Failed to compute hash");
+    let hash1 = hasher.digest();
     println!("\n🔥 Hash (byte-efficient mode): {}", hash1);
     
     // Demonstrate the unified API with more types
@@ -35,7 +35,7 @@ fn main() {
     hasher.update(999999999999999u128);
     hasher.update("Unified API test".to_string());
     
-    let hash2 = hasher.digest().expect("Failed to compute hash");
+    let hash2 = hasher.digest();
     println!("Hash with enum API: {}", hash2);
     
     // Demonstrate circuit-friendly mode
@@ -46,7 +46,7 @@ fn main() {
     });
     
     circuit_hasher.update(vec![1u8, 2, 3, 4, 5]);
-    let hash3 = circuit_hasher.digest().expect("Failed to compute circuit hash");
+    let hash3 = circuit_hasher.digest();
     println!("Circuit-friendly hash: {}", hash3);
     
     // Mix field elements and primitive types
@@ -56,7 +56,7 @@ fn main() {
     hasher.update(100u64);
     hasher.update("mixed types");
     
-    let hash4 = hasher.digest().expect("Failed to compute mixed hash");
+    let hash4 = hasher.digest();
     println!("Mixed hash: {}", hash4);
     
     // Demonstrate deterministic hashing
@@ -76,8 +76,8 @@ fn main() {
     hasher2.update("deterministic");
     hasher2.update(vec![10u8, 20, 30]);
     
-    let hash_a = hasher1.digest().expect("Failed to compute deterministic hash A");
-    let hash_b = hasher2.digest().expect("Failed to compute deterministic hash B");
+    let hash_a = hasher1.digest();
+    let hash_b = hasher2.digest();
     
     if hash_a == hash_b {
         println!("✅ Deterministic hashing works! Both hashes match: {}", hash_a);
@@ -95,7 +95,7 @@ fn main() {
         ..Default::default()
     });
     byte_efficient_hasher.update(test_bytes.clone());
-    let _hash_efficient = byte_efficient_hasher.digest().expect("Failed to compute efficient hash");
+    let _hash_efficient = byte_efficient_hasher.digest();
     let byte_efficient_time = start.elapsed();
     
     let start = std::time::Instant::now();
@@ -104,7 +104,7 @@ fn main() {
         ..Default::default()
     });
     circuit_friendly_hasher.update(test_bytes);
-    let _hash_circuit = circuit_friendly_hasher.digest().expect("Failed to compute circuit hash");
+    let _hash_circuit = circuit_friendly_hasher.digest();
     let circuit_friendly_time = start.elapsed();
     
     println!("  • Byte-efficient mode: {:?}", byte_efficient_time);
@@ -116,6 +116,6 @@ fn main() {
     println!("\n📦 Large input handling:");
     let large_string = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(100);
     hasher.update(large_string.as_str());
-    let hash_large = hasher.digest().expect("Failed to compute large hash");
+    let hash_large = hasher.digest();
     println!("Hash of large string ({} chars): {}", large_string.len(), hash_large);
 }

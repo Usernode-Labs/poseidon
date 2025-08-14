@@ -4,7 +4,7 @@
 //! at compile time, ensuring type safety and eliminating the possibility
 //! of using incorrect parameters.
 
-use crate::hasher::{MultiFieldHasher, FieldInput, HasherResult};
+use crate::hasher::{MultiFieldHasher, FieldInput};
 use crate::parameters::*;
 use crate::primitive::PackingConfig;
 use ark_ff::PrimeField;
@@ -46,14 +46,14 @@ where
     
     
     /// Get the current hash result while preserving the hasher state.
-    fn digest(&mut self) -> HasherResult<F> {
+    fn digest(&mut self) -> F {
         self.inner_mut().digest_result()
     }
     
     
     /// Consume the hasher and return the final hash result.
     /// Equivalent to `digest()` but takes ownership, ensuring the hasher cannot be reused.
-    fn finalize(mut self) -> HasherResult<F> where Self: Sized {
+    fn finalize(mut self) -> F where Self: Sized {
         self.digest()
     }
     
@@ -78,7 +78,7 @@ where
     /// Update the hasher with a field input
     fn update_field_input(&mut self, input: I);
     /// Compute the hash digest
-    fn digest_result(&mut self) -> HasherResult<F>;
+    fn digest_result(&mut self) -> F;
     /// Reset the hasher state
     fn reset_hasher(&mut self);
     /// Get the current element count
@@ -97,7 +97,7 @@ where
     }
     
     
-    fn digest_result(&mut self) -> HasherResult<F> {
+    fn digest_result(&mut self) -> F {
         self.digest()
     }
     

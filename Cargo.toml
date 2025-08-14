@@ -35,9 +35,6 @@ name = "basic_usage"
 name = "multi_curve"
 
 [[example]]
-name = "error_demo"
-
-[[example]]
 name = "primitive_types"
 
 [[example]]

@@ -26,18 +26,16 @@
 //! let mut hasher = PallasHasher::new();
 //!
 //! // Clean unified API
-//! hasher.update(true)?;
-//! hasher.update(12345u64)?;
-//! hasher.update("hello".to_string())?;
-//! hasher.update("hello")?;
-//! hasher.update(vec![1u8, 2, 3, 4])?;
+//! hasher.update(true);
+//! hasher.update(12345u64);
+//! hasher.update("hello".to_string());
+//! hasher.update("hello");
+//! hasher.update(vec![1u8, 2, 3, 4]);
 //!
-//! let hash = hasher.digest()?;
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! let hash = hasher.digest();
 //! ```
 
 use ark_ff::PrimeField;
-use crate::hasher::HasherResult;
 use std::collections::VecDeque;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -254,9 +252,9 @@ impl PackingBuffer {
     }
     
     /// Force extraction of all remaining bytes as field elements (with padding if needed).
-    pub fn flush_remaining<F: PrimeField>(&mut self) -> HasherResult<Vec<F>> {
+    pub fn flush_remaining<F: PrimeField>(&mut self) -> Vec<F> {
         if self.bytes.is_empty() {
-            return Ok(Vec::new());
+            return Vec::new();
         }
         
         let mut field_elements = Vec::new();
@@ -296,8 +294,8 @@ impl PackingBuffer {
                 }
             }
         }
-        
-        Ok(field_elements)
+
+        field_elements
     }
     
     /// Clear all bytes from the buffer.
@@ -466,7 +464,7 @@ mod tests {
         // Add a small amount of data
         buffer.push_bytes(&[1, 2, 3]);
         
-        let field_elements = buffer.flush_remaining::<ark_pallas::Fq>().unwrap();
+        let field_elements = buffer.flush_remaining::<ark_pallas::Fq>();
         
         // Should produce exactly one field element with padding
         assert_eq!(field_elements.len(), 1);

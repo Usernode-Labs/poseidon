@@ -21,7 +21,7 @@ fn test_processing_time_bounds() {
     
     hasher.update(large_input);
     
-    let _hash = hasher.digest().unwrap();
+    let _hash = hasher.digest();
     let elapsed = start_time.elapsed();
     
     assert!(elapsed < Duration::from_secs(10), 
@@ -42,7 +42,7 @@ fn test_memory_usage_bounds() {
         
         hasher.update(test_data);
         
-        let _hash = hasher.digest().unwrap();
+        let _hash = hasher.digest();
     }
     
     assert!(max_memory_estimate < 100_000_000, 
@@ -61,7 +61,7 @@ fn test_repeated_large_input_protection() {
         
         hasher.update(input);
         
-        let _hash = hasher.digest().unwrap();
+        let _hash = hasher.digest();
         
         let elapsed = start_time.elapsed();
         if elapsed > Duration::from_secs(30) {
@@ -83,8 +83,8 @@ fn test_input_edge_case_validation() {
     hasher.update(i64::MAX);
     hasher.update(i64::MIN);
     
-    let hash = hasher.digest();
-    assert!(hash.is_ok(), "Failed to complete hash with edge case inputs");
+    let _hash = hasher.digest();
+    // Hash computation should complete successfully with edge case inputs
 }
 
 /// Validates that byte arrays with invalid UTF-8 are handled correctly.
@@ -100,8 +100,8 @@ fn test_invalid_utf8_handling() {
     
     hasher.update(invalid_utf8);
     
-    let hash = hasher.digest();
-    assert!(hash.is_ok(), "Should complete hash with invalid UTF-8 bytes");
+    let _hash = hasher.digest();
+    // Hash computation should complete successfully with invalid UTF-8 bytes
 }
 
 /// Tests thread safety with concurrent input processing.
@@ -124,8 +124,8 @@ fn test_concurrent_input_validation() {
             let input_data = vec![thread_id as u8; input_size];
             
             hasher.update(input_data);
-            let hash = hasher.digest();
-            let success = hash.is_ok();
+            let _hash = hasher.digest();
+            let success = true; // digest() now always succeeds
             
             let mut results_guard = results_clone.lock().unwrap();
             results_guard.push((thread_id, success, input_size));
@@ -159,7 +159,7 @@ fn test_validation_performance_consistency() {
         
         let start = Instant::now();
         hasher.update(test_data);
-        let _hash = hasher.digest().unwrap();
+        let _hash = hasher.digest();
         let elapsed = start.elapsed();
         timings.push(elapsed);
     }
