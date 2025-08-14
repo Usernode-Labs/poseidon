@@ -7,11 +7,11 @@ fn main() -> Result<(), HasherError> {
     let data = 42u64;
     
     let mut pallas = PallasHasher::new();
-    pallas.update(data)?;
+    pallas.update(data);
     let pallas_hash = pallas.digest()?;
     
     let mut bn254 = BN254Hasher::new();
-    bn254.update(data)?;
+    bn254.update(data);
     let bn254_hash = bn254.digest()?;
     
     println!("Pallas hash: {}", pallas_hash);

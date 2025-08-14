@@ -9,7 +9,7 @@ fn main() {
     
     // Normal operation
     println!("✅ Normal operation:");
-    hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).unwrap();
+    hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
     let hash = hasher.digest().unwrap();
     println!("  Hash: {}\n", hash.to_string().chars().take(40).collect::<String>() + "...");
     

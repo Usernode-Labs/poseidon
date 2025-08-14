@@ -30,8 +30,8 @@ fn test_timing_consistency_field_elements() {
             let mut hasher = PallasHasher::new();
             
             let start = Instant::now();
-            hasher.update(PallasInput::ScalarField(*test_case)).unwrap();
-            let _hash = hasher.digest().unwrap();
+            hasher.update(PallasInput::ScalarField(*test_case));
+            let _hash = hasher.digest();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -60,8 +60,8 @@ fn test_timing_consistency_input_sizes() {
             let mut hasher = PallasHasher::new();
             
             let start = Instant::now();
-            hasher.update(test_data.clone()).unwrap();
-            let _hash = hasher.digest().unwrap();
+            hasher.update(test_data.clone());
+            let _hash = hasher.digest();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -96,8 +96,8 @@ fn test_timing_consistency_data_patterns() {
             let mut hasher = PallasHasher::new();
             
             let start = Instant::now();
-            hasher.update(pattern_data.clone()).unwrap();
-            let _hash = hasher.digest().unwrap();
+            hasher.update(pattern_data.clone());
+            let _hash = hasher.digest();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -134,8 +134,8 @@ fn test_field_conversion_timing() {
                 MultiFieldHasher::new_from_ref(&*PALLAS_PARAMS);
             
             let start = Instant::now();
-            hasher.update(FieldInput::ScalarField(*test_scalar)).unwrap();
-            let _hash = hasher.digest().unwrap();
+            hasher.update(FieldInput::ScalarField(*test_scalar));
+            let _hash = hasher.digest();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -159,8 +159,8 @@ fn test_cross_curve_timing_consistency() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
-        hasher.update(test_data.clone()).unwrap();
-        let _hash = hasher.digest().unwrap();
+        hasher.update(test_data.clone());
+        let _hash = hasher.digest();
         pallas_timings.push(start.elapsed());
     }
     all_timings.push(pallas_timings);
@@ -169,8 +169,8 @@ fn test_cross_curve_timing_consistency() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = BN254Hasher::new();
         let start = Instant::now();
-        hasher.update(test_data.clone()).unwrap();
-        let _hash = hasher.digest().unwrap();
+        hasher.update(test_data.clone());
+        let _hash = hasher.digest();
         bn254_timings.push(start.elapsed());
     }
     all_timings.push(bn254_timings);
@@ -179,8 +179,8 @@ fn test_cross_curve_timing_consistency() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = BLS12_381Hasher::new();
         let start = Instant::now();
-        hasher.update(test_data.clone()).unwrap();
-        let _hash = hasher.digest().unwrap();
+        hasher.update(test_data.clone());
+        let _hash = hasher.digest();
         bls381_timings.push(start.elapsed());
     }
     all_timings.push(bls381_timings);
@@ -202,8 +202,8 @@ fn test_cache_timing_effects() {
         let mut hasher = PallasHasher::new();
         
         let start = Instant::now();
-        hasher.update(test_data.clone()).unwrap();
-        let _hash = hasher.digest().unwrap();
+        hasher.update(test_data.clone());
+        let _hash = hasher.digest();
         let elapsed = start.elapsed();
         
         if round == 0 {
@@ -242,16 +242,16 @@ fn test_branch_prediction_effects() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
-        hasher.update(predictable_data.clone()).unwrap();
-        let _hash = hasher.digest().unwrap();
+        hasher.update(predictable_data.clone());
+        let _hash = hasher.digest();
         predictable_timings.push(start.elapsed());
     }
     
     for _ in 0..NUM_ROUNDS {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
-        hasher.update(unpredictable_data.clone()).unwrap();
-        let _hash = hasher.digest().unwrap();
+        hasher.update(unpredictable_data.clone());
+        let _hash = hasher.digest();
         unpredictable_timings.push(start.elapsed());
     }
     
@@ -286,8 +286,8 @@ fn test_memory_access_patterns() {
             let mut hasher = PallasHasher::new();
             
             let start = Instant::now();
-            hasher.update(test_data.clone()).unwrap();
-            let _hash = hasher.digest().unwrap();
+            hasher.update(test_data.clone());
+            let _hash = hasher.digest();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -347,10 +347,10 @@ fn analyze_timing_consistency(all_timings: &[Vec<Duration>], test_name: &str) {
     
     if all_timings.len() > 1 {
         let avg_times: Vec<Duration> = all_timings.iter().map(|t| average_duration(t)).collect();
-        let min_avg = avg_times.iter().min().unwrap();
-        let max_avg = avg_times.iter().max().unwrap();
+        let min_avg = avg_times.iter().min();
+        let max_avg = avg_times.iter().max();
         
-        let ratio = max_avg.as_nanos() as f64 / min_avg.as_nanos() as f64;
+        let ratio = max_avg.unwrap().as_nanos() as f64 / min_avg.unwrap().as_nanos() as f64;
         
         assert!(ratio < 5.0, 
                 "High timing variance in {}: {:.2}x difference", test_name, ratio);

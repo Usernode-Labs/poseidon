@@ -11,7 +11,7 @@ use ark_ff::PrimeField;
 fn test_random_byte_fuzzing() {
     let mut seed = 0x12345678u64;
     
-    for round in 0..100 {
+    for _round in 0..100 {
         let mut hasher = PallasHasher::new();
         
         seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
@@ -23,18 +23,10 @@ fn test_random_byte_fuzzing() {
             random_bytes.push((seed >> 24) as u8);
         }
         
-        let result = hasher.update(random_bytes.clone());
+        hasher.update(random_bytes.clone());
         
-        match result {
-            Ok(_) => {
-                let hash_result = hasher.digest();
-                assert!(hash_result.is_ok(), "Hash failed after random input at round {}", round);
-            },
-            Err(e) => {
-                let error_msg = format!("{}", e);
-                assert!(!error_msg.is_empty(), "Empty error message at round {}", round);
-            }
-        }
+        let hash_result = hasher.digest();
+        assert!(hash_result.is_ok(), "Hash failed after random input at round {}", _round);
     }
 }
 
@@ -43,7 +35,7 @@ fn test_random_byte_fuzzing() {
 fn test_random_string_fuzzing() {
     let mut seed = 0x87654321u64;
     
-    for round in 0..50 {
+    for _round in 0..50 {
         let mut hasher = PallasHasher::new();
         
         seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
@@ -61,12 +53,9 @@ fn test_random_string_fuzzing() {
             }
         }
         
-        let result = hasher.update(random_string.clone());
-        
-        if result.is_ok() {
-            let hash_result = hasher.digest();
-            assert!(hash_result.is_ok(), "Hash failed after random string at round {}", round);
-        }
+        hasher.update(random_string.clone());
+        let hash_result = hasher.digest();
+        assert!(hash_result.is_ok(), "Hash failed after random string at round {}", _round);
     }
 }
 
@@ -86,51 +75,43 @@ fn test_integer_boundary_fuzzing() {
     let i64_values = [i64::MIN, 0i64, i64::MAX];
     
     // Test u8 values
-    for (i, &value) in u8_values.iter().enumerate() {
-        let result = hasher.update(value);
-        assert!(result.is_ok(), "u8 boundary value {} failed: {:?}", i, value);
+    for &value in u8_values.iter() {
+        hasher.update(value);
     }
     
     // Test u16 values  
-    for (i, &value) in u16_values.iter().enumerate() {
-        let result = hasher.update(value);
-        assert!(result.is_ok(), "u16 boundary value {} failed: {:?}", i, value);
+    for &value in u16_values.iter() {
+        hasher.update(value);
     }
     
     // Test u32 values
-    for (i, &value) in u32_values.iter().enumerate() {
-        let result = hasher.update(value);
-        assert!(result.is_ok(), "u32 boundary value {} failed: {:?}", i, value);
+    for &value in u32_values.iter() {
+        hasher.update(value);
     }
     
     // Test u64 values
-    for (i, &value) in u64_values.iter().enumerate() {
-        let result = hasher.update(value);
-        assert!(result.is_ok(), "u64 boundary value {} failed: {:?}", i, value);
+    for &value in u64_values.iter() {
+        hasher.update(value);
     }
     
     // Test i8 values
-    for (i, &value) in i8_values.iter().enumerate() {
-        let result = hasher.update(value);
-        assert!(result.is_ok(), "i8 boundary value {} failed: {:?}", i, value);
+    for &value in i8_values.iter() {
+        hasher.update(value);
     }
     
     // Test i16 values
-    for (i, &value) in i16_values.iter().enumerate() {
-        let result = hasher.update(value);
-        assert!(result.is_ok(), "i16 boundary value {} failed: {:?}", i, value);
+    for &value in i16_values.iter() {
+        hasher.update(value);
     }
     
     // Test i32 values
-    for (i, &value) in i32_values.iter().enumerate() {
-        let result = hasher.update(value);
-        assert!(result.is_ok(), "i32 boundary value {} failed: {:?}", i, value);
+    for &value in i32_values.iter() {
+        hasher.update(value);
     }
     
     // Test i64 values
-    for (i, &value) in i64_values.iter().enumerate() {
-        let result = hasher.update(value);
-        assert!(result.is_ok(), "i64 boundary value {} failed: {:?}", i, value);
+    for &value in i64_values.iter() {
+        hasher.update(value);
     }
     
     let hash = hasher.digest();
@@ -153,9 +134,8 @@ fn test_field_element_patterns() {
         ark_pallas::Fr::from_le_bytes_mod_order(&[0xAA; 32]),
     ];
     
-    for (i, field_element) in field_test_cases.iter().enumerate() {
-        let result = hasher.update(PallasInput::ScalarField(*field_element));
-        assert!(result.is_ok(), "Field element test {} failed", i);
+    for field_element in field_test_cases.iter() {
+        hasher.update(PallasInput::ScalarField(*field_element));
     }
     
     let hash = hasher.digest();
@@ -177,9 +157,8 @@ fn test_curve_point_fuzzing() {
         (ark_pallas::Affine::generator() * ark_pallas::Fr::from(u64::MAX)).into_affine(),
     ];
     
-    for (i, point) in point_test_cases.iter().enumerate() {
-        let result = hasher.update(PallasInput::CurvePoint(*point));
-        assert!(result.is_ok(), "Curve point test {} failed", i);
+    for point in point_test_cases.iter() {
+        hasher.update(PallasInput::CurvePoint(*point));
     }
     
     let hash = hasher.digest();
@@ -200,7 +179,7 @@ fn test_mixed_input_fuzzing() {
             seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
             let input_type = seed % 6;
             
-            let input_result = match input_type {
+            match input_type {
                 0 => hasher.update(seed % 2 == 0),
                 1 => hasher.update(seed),
                 2 => hasher.update(seed as i64),
@@ -211,7 +190,7 @@ fn test_mixed_input_fuzzing() {
                         seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                         bytes.push((seed >> 24) as u8);
                     }
-                    hasher.update(bytes)
+                    hasher.update(bytes);
                 },
                 4 => {
                     let len = (seed % 50) + 1;
@@ -219,21 +198,18 @@ fn test_mixed_input_fuzzing() {
                         seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                         char::from((seed % 94 + 32) as u8)
                     }).collect();
-                    hasher.update(chars)
+                    hasher.update(chars);
                 },
                 5 => {
                     let field_element = ark_pallas::Fr::from(seed);
-                    hasher.update(PallasInput::ScalarField(field_element))
+                    hasher.update(PallasInput::ScalarField(field_element));
                 },
                 _ => hasher.update(seed),
             };
-            
-            if input_result.is_err() {
-                break;
-            }
         }
         
-        let _ = hasher.digest();
+        let hash = hasher.digest();
+        assert!(hash.is_ok(), "Mixed input fuzzing failed");
     }
 }
 
@@ -252,7 +228,7 @@ fn test_byte_pattern_fuzzing() {
     ];
     
     for pattern in patterns.iter() {
-        let _ = hasher.update(pattern.clone());
+        hasher.update(pattern.clone());
     }
     
     let hash = hasher.digest();
@@ -265,7 +241,7 @@ fn test_byte_pattern_fuzzing() {
 fn test_large_input_fuzzing() {
     let mut hasher = PallasHasher::new();
     
-    hasher.update(12345u64).unwrap();
+    hasher.update(12345u64);
     
     let sizes = vec![1000, 10000, 50000];
     
@@ -281,38 +257,35 @@ fn test_large_input_fuzzing() {
         }).collect();
         
         let start_time = std::time::Instant::now();
-        let result = hasher.update(large_data.clone());
+        hasher.update(large_data.clone());
         let elapsed = start_time.elapsed();
         
-        if result.is_err() || elapsed > std::time::Duration::from_secs(5) {
+        if elapsed > std::time::Duration::from_secs(5) {
             break;
         }
     }
     
-    let _ = hasher.digest();
+    let hash = hasher.digest();
+    assert!(hash.is_ok(), "Failed to complete large input hash");
 }
 
 /// Tests rapid successive inputs for state consistency.
 #[test]
 fn test_rapid_input_fuzzing() {
-    for round in 0..10 {
+    for _round in 0..10 {
         let mut hasher = PallasHasher::new();
         
         for i in 0..1000 {
-            let result = match i % 4 {
+            match i % 4 {
                 0 => hasher.update(i % 2 == 0),
                 1 => hasher.update((i % 256) as u8),
                 2 => hasher.update((i % 65536) as u16),
                 3 => hasher.update(vec![(i % 256) as u8; 3]),
                 _ => hasher.update(i as u32),
             };
-            
-            if result.is_err() {
-                break;
-            }
         }
         
         let hash = hasher.digest();
-        assert!(hash.is_ok(), "Round {}: Failed to complete rapid input hash", round);
+        assert!(hash.is_ok(), "Round {}: Failed to complete rapid input hash", _round);
     }
 }

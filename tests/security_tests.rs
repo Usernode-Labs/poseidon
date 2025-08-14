@@ -12,19 +12,19 @@ fn test_memory_zeroization() {
     let mut hasher = PallasHasher::new();
     
     let secret_data = ark_pallas::Fr::from(0xDEADBEEFu64);
-    hasher.update(PallasInput::ScalarField(secret_data)).unwrap();
+    hasher.update(PallasInput::ScalarField(secret_data));
     
-    let _hash = hasher.digest().unwrap();
+    let _hash = hasher.digest().expect("Failed to digest");
     
     // digest() now preserves state - use finalize() to consume
     assert!(hasher.element_count() > 0, "State should be preserved after digest");
     
     // Test finalize() consumes the hasher
     let mut hasher2 = PallasHasher::new();
-    hasher2.update(PallasInput::ScalarField(secret_data)).unwrap();
-    let _final_hash = hasher2.finalize().unwrap(); // hasher2 is consumed here
+    hasher2.update(PallasInput::ScalarField(secret_data));
+    let _final_hash = hasher2.finalize().expect("Failed to finalize"); // hasher2 is consumed here
     
-    hasher.update(PallasInput::ScalarField(secret_data)).unwrap();
+    hasher.update(PallasInput::ScalarField(secret_data));
     assert!(hasher.element_count() > 0, "Data was not added");
     
     hasher.reset();
@@ -33,33 +33,9 @@ fn test_memory_zeroization() {
     drop(hasher);
 }
 
-/// Tests that oversized inputs are rejected to prevent DoS.
-#[test]
-#[should_panic(expected = "Input size limit exceeded")]
-fn test_input_size_limits() {
-    let mut hasher = PallasHasher::new();
-    
-    let huge_string = "a".repeat(100_000_000);
-    
-    match hasher.update(huge_string) {
-        Err(_) => (),
-        Ok(_) => panic!("Input size limit exceeded - should have been rejected"),
-    }
-}
+// Removed test_input_size_limits - no longer relevant with non-result API
 
-/// Tests protection against memory exhaustion from large byte arrays.
-#[test]
-#[should_panic(expected = "Byte array size limit exceeded")]
-fn test_large_byte_array_limits() {
-    let mut hasher = PallasHasher::new();
-    
-    let huge_bytes = vec![0u8; 50_000_000];
-    
-    match hasher.update(huge_bytes) {
-        Err(_) => (),
-        Ok(_) => panic!("Byte array size limit exceeded - should have been rejected"),
-    }
-}
+// Removed test_large_byte_array_limits - no longer relevant with non-result API
 
 /// Validates that field conversion handles large values without overflow.
 #[test]
@@ -72,9 +48,7 @@ fn test_field_conversion_overflow_protection() {
     
     let large_scalar = ark_pallas::Fr::from_le_bytes_mod_order(&[255u8; 32]);
     
-    let result = hasher.update(FieldInput::ScalarField(large_scalar));
-    
-    assert!(result.is_ok(), "Field conversion should handle large scalars safely");
+    hasher.update(FieldInput::ScalarField(large_scalar));
 }
 
 /// Basic timing consistency test for side-channel detection.
@@ -95,8 +69,8 @@ fn test_basic_timing_consistency() {
         let mut hasher = PallasHasher::new();
         
         let start = Instant::now();
-        hasher.update(PallasInput::ScalarField(test_case)).unwrap();
-        let _hash = hasher.digest().unwrap();
+        hasher.update(PallasInput::ScalarField(test_case));
+        let _hash = hasher.digest().expect("Failed to digest");
         let duration = start.elapsed();
         
         timings.push(duration);
@@ -130,8 +104,8 @@ fn test_hash_determinism_security() {
         
         for _ in 0..10 {
             let mut hasher = PallasHasher::new();
-            hasher.update(data).unwrap();
-            let hash = hasher.digest().unwrap();
+            hasher.update(data);
+            let hash = hasher.digest().expect("Failed to digest");
             hashes.push(hash.to_string());
         }
         
@@ -145,8 +119,8 @@ fn test_hash_determinism_security() {
         
         for _ in 0..10 {
             let mut hasher = PallasHasher::new();
-            hasher.update(data).unwrap();
-            let hash = hasher.digest().unwrap();
+            hasher.update(data);
+            let hash = hasher.digest().expect("Failed to digest");
             hashes.push(hash.to_string());
         }
         
@@ -167,8 +141,8 @@ fn test_hash_determinism_security() {
         
         for _ in 0..10 {
             let mut hasher = PallasHasher::new();
-            hasher.update(data.clone()).unwrap();
-            let hash = hasher.digest().unwrap();
+            hasher.update(data.clone());
+            let hash = hasher.digest().expect("Failed to digest");
             hashes.push(hash.to_string());
         }
         
@@ -178,46 +152,9 @@ fn test_hash_determinism_security() {
     }
 }
 
-/// Validates that errors don't leak sensitive information.
-#[test]
-fn test_error_information_leakage() {
-    let mut hasher = PallasHasher::new();
-    
-    let test_cases: Vec<Vec<u8>> = vec![
-        vec![0, 1, 2, 3], // Some bytes that might be interpreted as invalid UTF-8
-        vec![0u8; 0],     // Empty bytes
-    ];
-    
-    for test_case in test_cases {
-        let result = hasher.update(test_case);
-        
-        if let Err(error) = result {
-            let error_msg = format!("{}", error);
-            
-            assert!(!error_msg.contains("0x"), "Error message contains memory address: {}", error_msg);
-            
-            for byte in error_msg.bytes() {
-                assert!(byte.is_ascii() && byte >= 32, "Error message contains non-printable data");
-            }
-        }
-    }
-}
+// Removed test_error_information_leakage - no longer relevant with non-result API
 
-/// Tests resource cleanup after errors.
-#[test]
-fn test_error_cleanup() {
-    let mut hasher = PallasHasher::new();
-    
-    hasher.update(42u64).unwrap();
-    
-    let _result = hasher.update(vec![0u8; 1000000]);
-    
-    let cleanup_result = hasher.update(100u64);
-    assert!(cleanup_result.is_ok(), "Hasher not properly cleaned up after error");
-    
-    let hash = hasher.digest();
-    assert!(hash.is_ok(), "Hasher state corrupted after error");
-}
+// Removed test_error_cleanup - no longer relevant with non-result API
 
 /// Tests protection against integer overflow in packing buffer.
 #[test]
@@ -234,8 +171,7 @@ fn test_packing_buffer_overflow() {
     // Check buffer length
     assert_eq!(buffer.len(), 5000, "Byte counting overflow detected");
     
-    let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>();
-    assert!(field_elements.is_ok(), "Field element extraction failed after large input");
+    let _field_elements = buffer.extract_field_elements::<ark_pallas::Fq>();
 }
 
 /// Validates cross-curve parameter isolation.
@@ -247,13 +183,13 @@ fn test_parameter_isolation_security() {
     
     let test_data = 12345u64;
     
-    pallas_hasher1.update(test_data).unwrap();
-    pallas_hasher2.update(test_data).unwrap();
-    bn254_hasher.update(test_data).unwrap();
+    pallas_hasher1.update(test_data);
+    pallas_hasher2.update(test_data);
+    bn254_hasher.update(test_data);
     
-    let pallas_hash1 = pallas_hasher1.digest().unwrap();
-    let pallas_hash2 = pallas_hasher2.digest().unwrap();
-    let bn254_hash = bn254_hasher.digest().unwrap();
+    let pallas_hash1 = pallas_hasher1.digest().expect("Failed to digest");
+    let pallas_hash2 = pallas_hasher2.digest().expect("Failed to digest");
+    let bn254_hash = bn254_hasher.digest().expect("Failed to digest");
     
     assert_eq!(pallas_hash1.to_string(), pallas_hash2.to_string(), 
               "Pallas hasher parameter isolation failed");
@@ -268,8 +204,7 @@ fn test_stack_overflow_protection() {
     let mut hasher = PallasHasher::new();
     
     for i in 0..10000 {
-        let result = hasher.update((i % 256) as u8);
-        assert!(result.is_ok(), "Stack overflow or recursion limit hit at iteration {}", i);
+        hasher.update((i % 256) as u8);
     }
     
     let hash = hasher.digest();

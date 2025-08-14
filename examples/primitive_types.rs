@@ -11,19 +11,19 @@ fn main() {
     println!("📝 Hashing various primitive types:");
     
     // Hash different primitive types
-    hasher.update(true).expect("Failed to update with bool");
+    hasher.update(true);
     println!("  • Added boolean: true");
     
-    hasher.update(12345u64).expect("Failed to update with u64");
+    hasher.update(12345u64);
     println!("  • Added u64: 12345");
     
-    hasher.update(-6789i32).expect("Failed to update with i32");
+    hasher.update(-6789i32);
     println!("  • Added i32: -6789");
     
-    hasher.update("Hello, Poseidon!").expect("Failed to update with string");
+    hasher.update("Hello, Poseidon!");
     println!("  • Added string: \"Hello, Poseidon!\"");
     
-    hasher.update(vec![1u8, 2, 3, 4, 5, 255]).expect("Failed to update with bytes");
+    hasher.update(vec![1u8, 2, 3, 4, 5, 255]);
     println!("  • Added bytes: [1, 2, 3, 4, 5, 255]");
     
     let hash1 = hasher.digest().expect("Failed to compute hash");
@@ -31,9 +31,9 @@ fn main() {
     
     // Demonstrate the unified API with more types
     println!("\n🔧 Adding more types:");
-    hasher.update(false).expect("Failed to update with bool");
-    hasher.update(999999999999999u128).expect("Failed to update with u128");
-    hasher.update("Unified API test".to_string()).expect("Failed to update with string");
+    hasher.update(false);
+    hasher.update(999999999999999u128);
+    hasher.update("Unified API test".to_string());
     
     let hash2 = hasher.digest().expect("Failed to compute hash");
     println!("Hash with enum API: {}", hash2);
@@ -45,16 +45,16 @@ fn main() {
         ..Default::default()
     });
     
-    circuit_hasher.update(vec![1u8, 2, 3, 4, 5]).expect("Failed to update circuit hasher");
+    circuit_hasher.update(vec![1u8, 2, 3, 4, 5]);
     let hash3 = circuit_hasher.digest().expect("Failed to compute circuit hash");
     println!("Circuit-friendly hash: {}", hash3);
     
     // Mix field elements and primitive types
     println!("\n🌊 Mixing field elements and primitive types:");
     let scalar = ark_pallas::Fr::from(42u64);
-    hasher.update(PallasInput::ScalarField(scalar)).expect("Failed to update with scalar");
-    hasher.update(100u64).expect("Failed to update with u64");
-    hasher.update("mixed types").expect("Failed to update with string");
+    hasher.update(PallasInput::ScalarField(scalar));
+    hasher.update(100u64);
+    hasher.update("mixed types");
     
     let hash4 = hasher.digest().expect("Failed to compute mixed hash");
     println!("Mixed hash: {}", hash4);
@@ -66,15 +66,15 @@ fn main() {
     
     
     // Add the same data to both hashers
-    hasher1.update(true).expect("Failed to update hasher1");
-    hasher1.update(123456u64).expect("Failed to update hasher1");
-    hasher1.update("deterministic").expect("Failed to update hasher1");
-    hasher1.update(vec![10u8, 20, 30]).expect("Failed to update hasher1");
+    hasher1.update(true);
+    hasher1.update(123456u64);
+    hasher1.update("deterministic");
+    hasher1.update(vec![10u8, 20, 30]);
     
-    hasher2.update(true).expect("Failed to update hasher2");
-    hasher2.update(123456u64).expect("Failed to update hasher2");
-    hasher2.update("deterministic").expect("Failed to update hasher2");
-    hasher2.update(vec![10u8, 20, 30]).expect("Failed to update hasher2");
+    hasher2.update(true);
+    hasher2.update(123456u64);
+    hasher2.update("deterministic");
+    hasher2.update(vec![10u8, 20, 30]);
     
     let hash_a = hasher1.digest().expect("Failed to compute deterministic hash A");
     let hash_b = hasher2.digest().expect("Failed to compute deterministic hash B");
@@ -94,7 +94,7 @@ fn main() {
         mode: PackingMode::ByteEfficient,
         ..Default::default()
     });
-    byte_efficient_hasher.update(test_bytes.clone()).expect("Failed to update byte efficient");
+    byte_efficient_hasher.update(test_bytes.clone());
     let _hash_efficient = byte_efficient_hasher.digest().expect("Failed to compute efficient hash");
     let byte_efficient_time = start.elapsed();
     
@@ -103,7 +103,7 @@ fn main() {
         mode: PackingMode::CircuitFriendly,
         ..Default::default()
     });
-    circuit_friendly_hasher.update(test_bytes).expect("Failed to update circuit friendly");
+    circuit_friendly_hasher.update(test_bytes);
     let _hash_circuit = circuit_friendly_hasher.digest().expect("Failed to compute circuit hash");
     let circuit_friendly_time = start.elapsed();
     
@@ -115,7 +115,7 @@ fn main() {
     // Demonstrate large input handling
     println!("\n📦 Large input handling:");
     let large_string = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(100);
-    hasher.update(large_string.as_str()).expect("Failed to update with large string");
+    hasher.update(large_string.as_str());
     let hash_large = hasher.digest().expect("Failed to compute large hash");
     println!("Hash of large string ({} chars): {}", large_string.len(), hash_large);
 }

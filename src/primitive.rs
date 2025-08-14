@@ -219,7 +219,7 @@ impl PackingBuffer {
     /// Extract all complete field elements from the buffer.
     /// 
     /// Returns the field elements and leaves any remaining bytes in the buffer.
-    pub fn extract_field_elements<F: PrimeField>(&mut self) -> HasherResult<Vec<F>> {
+    pub fn extract_field_elements<F: PrimeField>(&mut self) -> Vec<F> {
         let mut field_elements = Vec::new();
         
         match self.config.mode {
@@ -249,8 +249,8 @@ impl PackingBuffer {
                 }
             }
         }
-        
-        Ok(field_elements)
+
+        field_elements
     }
     
     /// Force extraction of all remaining bytes as field elements (with padding if needed).
@@ -328,7 +328,7 @@ impl PackingBuffer {
 }
 
 /// Serialize a RustInput into bytes for packing.
-pub fn serialize_rust_input(input: &RustInput, buffer: &mut PackingBuffer) -> HasherResult<()> {
+pub fn serialize_rust_input(input: &RustInput, buffer: &mut PackingBuffer) {
     match input {
         RustInput::Bool(b) => buffer.push_bool(*b),
         // Unsigned integers - direct conversion is safe
@@ -352,7 +352,6 @@ pub fn serialize_rust_input(input: &RustInput, buffer: &mut PackingBuffer) -> Ha
             buffer.push_bytes(bytes);
         }
     }
-    Ok(())
 }
 
 // Manual implementation of ZeroizeOnDrop for PackingBuffer
@@ -422,7 +421,7 @@ mod tests {
             buffer.push_bytes(&[i]);
         }
         
-        let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>().unwrap();
+        let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>();
         assert!(!field_elements.is_empty());
         
         // Some bytes may or may not remain - that's expected
@@ -438,7 +437,7 @@ mod tests {
         
         buffer.push_bytes(&[1, 2, 3]);
         
-        let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>().unwrap();
+        let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>();
         
         // In circuit-friendly mode, each byte becomes its own field element
         assert_eq!(field_elements.len(), 3);
@@ -452,9 +451,9 @@ mod tests {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
         
-        serialize_rust_input(&RustInput::Bool(true), &mut buffer).unwrap();
-        serialize_rust_input(&RustInput::U64(12345), &mut buffer).unwrap();
-        serialize_rust_input(&RustInput::String("test".to_string()), &mut buffer).unwrap();
+        serialize_rust_input(&RustInput::Bool(true), &mut buffer);
+        serialize_rust_input(&RustInput::U64(12345), &mut buffer);
+        serialize_rust_input(&RustInput::String("test".to_string()), &mut buffer);
         
         assert!(!buffer.is_empty());
     }

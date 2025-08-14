@@ -40,7 +40,7 @@ where
     /// Update the hasher with any compatible input.
     /// 
     /// This accepts field elements, curve points, primitives, or any type with a From implementation.
-    fn update<T: Into<I>>(&mut self, input: T) -> HasherResult<()> {
+    fn update<T: Into<I>>(&mut self, input: T) {
         self.inner_mut().update_field_input(input.into())
     }
     
@@ -76,7 +76,7 @@ where
     F: PrimeField,
 {
     /// Update the hasher with a field input
-    fn update_field_input(&mut self, input: I) -> HasherResult<()>;
+    fn update_field_input(&mut self, input: I);
     /// Compute the hash digest
     fn digest_result(&mut self) -> HasherResult<F>;
     /// Reset the hasher state
@@ -92,7 +92,7 @@ where
     S: PrimeField,
     G: ark_ec::AffineRepr<BaseField = F>,
 {
-    fn update_field_input(&mut self, input: FieldInput<F, S, G>) -> HasherResult<()> {
+    fn update_field_input(&mut self, input: FieldInput<F, S, G>) {
         self.update(input)
     }
     

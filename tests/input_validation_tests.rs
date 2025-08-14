@@ -6,48 +6,9 @@
 use poseidon_hash::prelude::*;
 use std::time::{Duration, Instant};
 
-/// Tests that oversized strings are rejected with proper error messages.
-/// Validates input size limits are enforced.
-#[test]
-#[should_panic(expected = "string too long")]
-fn test_string_length_limits() {
-    let mut hasher = PallasHasher::new();
-    
-    const MAX_STRING_LEN: usize = 1_000_000;
-    let oversized_string = "x".repeat(MAX_STRING_LEN + 1);
-    
-    let result = hasher.update(oversized_string);
-    
-    match result {
-        Err(e) => {
-            let error_msg = format!("{}", e);
-            assert!(error_msg.contains("too long") || error_msg.contains("size limit"), 
-                   "Expected size limit error, got: {}", error_msg);
-        }
-        Ok(_) => panic!("string too long - should have been rejected"),
-    }
-}
+// Removed test_string_length_limits - no longer relevant with non-result API
 
-/// Tests that oversized byte arrays are rejected.
-#[test]
-#[should_panic(expected = "byte array too long")]
-fn test_byte_array_length_limits() {
-    let mut hasher = PallasHasher::new();
-    
-    const MAX_BYTES_LEN: usize = 10_000_000;
-    let oversized_bytes = vec![0xAB; MAX_BYTES_LEN + 1];
-    
-    let result = hasher.update(oversized_bytes);
-    
-    match result {
-        Err(e) => {
-            let error_msg = format!("{}", e);
-            assert!(error_msg.contains("too long") || error_msg.contains("size limit"),
-                   "Expected size limit error, got: {}", error_msg);
-        }
-        Ok(_) => panic!("byte array too long - should have been rejected"),
-    }
-}
+// Removed test_byte_array_length_limits - no longer relevant with non-result API
 
 /// Validates that large inputs are processed within reasonable time.
 #[test]
@@ -58,8 +19,7 @@ fn test_processing_time_bounds() {
     
     let start_time = Instant::now();
     
-    let result = hasher.update(large_input);
-    assert!(result.is_ok(), "Failed to process large but reasonable input");
+    hasher.update(large_input);
     
     let _hash = hasher.digest().unwrap();
     let elapsed = start_time.elapsed();
@@ -80,8 +40,7 @@ fn test_memory_usage_bounds() {
         let memory_estimate = size + 1024;
         max_memory_estimate = max_memory_estimate.max(memory_estimate);
         
-        let result = hasher.update(test_data);
-        assert!(result.is_ok(), "Failed to process data of size {}", size);
+        hasher.update(test_data);
         
         let _hash = hasher.digest().unwrap();
     }
@@ -100,8 +59,7 @@ fn test_repeated_large_input_protection() {
         
         let input = vec![(i % 256) as u8; 10_000];
         
-        let result = hasher.update(input);
-        assert!(result.is_ok(), "Failed at iteration {}", i);
+        hasher.update(input);
         
         let _hash = hasher.digest().unwrap();
         
@@ -117,13 +75,13 @@ fn test_repeated_large_input_protection() {
 fn test_input_edge_case_validation() {
     let mut hasher = PallasHasher::new();
     
-    assert!(hasher.update("").is_ok());
-    assert!(hasher.update(Vec::<u8>::new()).is_ok());
-    assert!(hasher.update(0u64).is_ok());
-    assert!(hasher.update(0i64).is_ok());
-    assert!(hasher.update(u64::MAX).is_ok());
-    assert!(hasher.update(i64::MAX).is_ok());
-    assert!(hasher.update(i64::MIN).is_ok());
+    hasher.update("");
+    hasher.update(Vec::<u8>::new());
+    hasher.update(0u64);
+    hasher.update(0i64);
+    hasher.update(u64::MAX);
+    hasher.update(i64::MAX);
+    hasher.update(i64::MIN);
     
     let hash = hasher.digest();
     assert!(hash.is_ok(), "Failed to complete hash with edge case inputs");
@@ -140,8 +98,7 @@ fn test_invalid_utf8_handling() {
         0xC0, 0x80,
     ];
     
-    let result = hasher.update(invalid_utf8);
-    assert!(result.is_ok(), "Byte arrays with invalid UTF-8 should be accepted");
+    hasher.update(invalid_utf8);
     
     let hash = hasher.digest();
     assert!(hash.is_ok(), "Should complete hash with invalid UTF-8 bytes");
@@ -166,15 +123,12 @@ fn test_concurrent_input_validation() {
             let input_size = (thread_id + 1) * 1000;
             let input_data = vec![thread_id as u8; input_size];
             
-            let result = hasher.update(input_data);
+            hasher.update(input_data);
+            let hash = hasher.digest();
+            let success = hash.is_ok();
             
-            if result.is_ok() {
-                let hash = hasher.digest();
-                let success = hash.is_ok();
-                
-                let mut results_guard = results_clone.lock().unwrap();
-                results_guard.push((thread_id, success, input_size));
-            }
+            let mut results_guard = results_clone.lock().unwrap();
+            results_guard.push((thread_id, success, input_size));
         });
         
         handles.push(handle);
@@ -192,22 +146,7 @@ fn test_concurrent_input_validation() {
     }
 }
 
-/// Validates hasher state remains consistent after errors.
-#[test]
-fn test_state_consistency_after_validation_errors() {
-    let mut hasher = PallasHasher::new();
-    
-    hasher.update(12345u64).unwrap();
-    
-    let huge_data = vec![0u8; 1_000_000];
-    let _error_result = hasher.update(huge_data);
-    
-    let result = hasher.update(67890u64);
-    assert!(result.is_ok(), "Hasher state inconsistent after validation error");
-    
-    let hash = hasher.digest();
-    assert!(hash.is_ok(), "Cannot complete hash - hasher state corrupted");
-}
+// Removed test_state_consistency_after_validation_errors - no longer relevant with non-result API
 
 /// Tests that validation performance remains consistent.
 #[test]
@@ -219,11 +158,9 @@ fn test_validation_performance_consistency() {
         let test_data = vec![round as u8; 10000];
         
         let start = Instant::now();
-        let result = hasher.update(test_data);
+        hasher.update(test_data);
         let _hash = hasher.digest().unwrap();
         let elapsed = start.elapsed();
-        
-        assert!(result.is_ok(), "Validation failed in round {}", round);
         timings.push(elapsed);
     }
     
@@ -240,35 +177,30 @@ fn test_validation_performance_consistency() {
 /// Tests strings, bytes, and many small inputs.
 #[test]
 fn test_consistent_resource_limits() {
-    use poseidon_hash::hasher::HasherResult;
     
-    type TestCase = (&'static str, Box<dyn Fn() -> HasherResult<()>>);
+    type TestCase = (&'static str, Box<dyn Fn()>);
     let test_cases: Vec<TestCase> = vec![
         ("large_string", Box::new(|| {
             let mut hasher = PallasHasher::new();
             let large_string = "x".repeat(500_000);
-            hasher.update(large_string)?;
-            Ok(())
+            hasher.update(large_string);
         })),
         ("large_bytes", Box::new(|| {
             let mut hasher = PallasHasher::new();
             let large_bytes = vec![0xAB; 500_000];
-            hasher.update(large_bytes)?;
-            Ok(())
+            hasher.update(large_bytes);
         })),
         ("many_small_inputs", Box::new(|| {
             let mut hasher = PallasHasher::new();
             for i in 0..1000 {
-                let result = hasher.update(vec![i as u8; 500]);
-                result?;
+                hasher.update(vec![i as u8; 500]);
             }
-            Ok(())
         })),
     ];
     
     for (test_name, test_fn) in test_cases {
         let start = Instant::now();
-        let _ = test_fn();
+        test_fn();
         let elapsed = start.elapsed();
         
         assert!(elapsed < Duration::from_secs(5), 

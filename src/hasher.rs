@@ -40,9 +40,6 @@ use thiserror::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::primitive::{RustInput, PackingBuffer, PackingConfig, serialize_rust_input};
 
-/// Number of bits per byte
-const BITS_PER_BYTE: usize = 8;
-
 /// Errors that can occur during hashing operations.
 #[derive(Error, Debug)]
 pub enum HasherError {
@@ -197,76 +194,42 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// Handles different field bit size relationships:
     /// * Same bit size: Simple byte representation conversion
     /// * Fr < Fq: Direct conversion without data loss
-    /// * Fr > Fq: Automatic chunking into multiple Fq elements
-    pub fn update_scalar_field(&mut self, element: S) -> HasherResult<()> {
+    /// * Fr > Fq: Not supported
+    pub fn update_scalar_field(&mut self, element: S) {
         let fr_bits = S::MODULUS_BIT_SIZE;
         let fq_bits = F::MODULUS_BIT_SIZE;
         
-        if fr_bits == fq_bits {
-            // Same bit size - simple byte representation change
-            let bytes = element.into_bigint().to_bytes_le();
-            let converted = F::from_le_bytes_mod_order(&bytes);
-            self.state.push(converted);
-        } else if fr_bits < fq_bits {
-            // Fr smaller than Fq - direct conversion (no data loss)
+        if fr_bits <= fq_bits {
+            // Same bit size or Fr smaller than Fq, lossless conversion
             let bytes = element.into_bigint().to_bytes_le();
             let converted = F::from_le_bytes_mod_order(&bytes);
             self.state.push(converted);
         } else {
             // Fr larger than Fq - need to decompose (rare case)
-            let chunks_needed = fr_bits.div_ceil(fq_bits);
-            let bytes = element.into_bigint().to_bytes_le();
-            
-            // Safe conversion from u32 to usize
-            let fq_bits_usize = usize::try_from(fq_bits)
-                .map_err(|_| HasherError::NumericConversionFailed { 
-                    reason: format!("Field bit size {fq_bits} too large for usize") 
-                })?;
-            let bytes_per_chunk = fq_bits_usize.div_ceil(BITS_PER_BYTE);
-            
-            let chunks_needed_usize = usize::try_from(chunks_needed)
-                .map_err(|_| HasherError::NumericConversionFailed {
-                    reason: format!("Number of chunks {chunks_needed} too large for usize")
-                })?;
-            
-            for i in 0..chunks_needed_usize {
-                let start = i * bytes_per_chunk;
-                let end = std::cmp::min(start + bytes_per_chunk, bytes.len());
-                let mut chunk = vec![0u8; bytes_per_chunk];
-                
-                if start < bytes.len() {
-                    let copy_len = std::cmp::min(chunk.len(), end - start);
-                    chunk[..copy_len].copy_from_slice(&bytes[start..start + copy_len]);
-                }
-                
-                let chunk_element = F::from_le_bytes_mod_order(&chunk);
-                self.state.push(chunk_element);
-            }
+            unimplemented!("We do not support curves where Fr > Fq"); 
         }
-        Ok(())
     }
 
     /// Absorbs a curve point by extracting and hashing its affine coordinates.
-    pub fn update_curve_point(&mut self, point: G) -> HasherResult<()> {
+    pub fn update_curve_point(&mut self, point: G) {
         if point.is_zero() {
             // Point at infinity -> add (0, 0)
             self.state.push(F::zero());
             self.state.push(F::zero());
         } else {
             // Regular point -> add (x, y) coordinates
-            let (x, y) = point.xy().ok_or(HasherError::PointConversionFailed)?;
+            // safe unwrap per above check, if not zero, point must have coordinates
+            let (x, y) = point.xy().unwrap();
             self.state.push(x);
             self.state.push(y);
         }
-        Ok(())
     }
 
     /// Absorbs any field input type using the appropriate specialized method.
-    pub fn update(&mut self, input: FieldInput<F, S, G>) -> HasherResult<()> {
+    pub fn update(&mut self, input: FieldInput<F, S, G>) {
         match input {
             FieldInput::BaseField(fq) => {
                 self.update_base_field(fq);
-                Ok(())
             }
             FieldInput::ScalarField(fr) => self.update_scalar_field(fr),
             FieldInput::CurvePoint(point) => self.update_curve_point(point),
@@ -282,17 +245,15 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// # Arguments
     ///
     /// * `input` - The primitive value to add
-    fn update_primitive(&mut self, input: RustInput) -> HasherResult<()> {
+    fn update_primitive(&mut self, input: RustInput) {
         // Serialize the input into the primitive buffer
-        serialize_rust_input(&input, &mut self.primitive_buffer)?;
+        serialize_rust_input(&input, &mut self.primitive_buffer);
         
         // Extract any complete field elements and add them
-        let field_elements = self.primitive_buffer.extract_field_elements::<F>()?;
+        let field_elements = self.primitive_buffer.extract_field_elements::<F>();
         for element in field_elements {
             self.state.push(element);
         }
-        
-        Ok(())
     }
     
 
@@ -406,8 +367,8 @@ mod tests {
         let b = ark_pallas::Fq::from(2u64);
         
         // Old way still works
-        hasher.update(PallasInput::BaseField(a)).expect("Failed to update hasher");
-        hasher.update(PallasInput::BaseField(b)).expect("Failed to update hasher");
+        hasher.update(PallasInput::BaseField(a));
+        hasher.update(PallasInput::BaseField(b));
         
         let hash = hasher.digest().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
@@ -418,9 +379,9 @@ mod tests {
         let mut hasher = PallasHasher::new();
         
         // New way - much cleaner!
-        hasher.update(ark_pallas::Fq::from(1u64)).expect("Failed to update Fq");
-        hasher.update(ark_pallas::Fr::from(2u64)).expect("Failed to update Fr");
-        hasher.update(ark_pallas::Affine::generator()).expect("Failed to update point");
+        hasher.update(ark_pallas::Fq::from(1u64));
+        hasher.update(ark_pallas::Fr::from(2u64));
+        hasher.update(ark_pallas::Affine::generator());
         
         let hash = hasher.digest().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
@@ -431,13 +392,13 @@ mod tests {
         let mut hasher = PallasHasher::new();
         
         // Everything through a single update method - this is the dream API!
-        hasher.update(ark_pallas::Fq::from(1u64)).expect("Failed to update Fq");
-        hasher.update(ark_pallas::Fr::from(2u64)).expect("Failed to update Fr");
-        hasher.update(ark_pallas::Affine::generator()).expect("Failed to update point");
-        hasher.update(true).expect("Failed to update bool");
-        hasher.update(42u64).expect("Failed to update u64");
-        hasher.update("hello").expect("Failed to update string");
-        hasher.update(vec![1u8, 2, 3]).expect("Failed to update bytes");
+        hasher.update(ark_pallas::Fq::from(1u64));
+        hasher.update(ark_pallas::Fr::from(2u64));
+        hasher.update(ark_pallas::Affine::generator());
+        hasher.update(true);
+        hasher.update(42u64);
+        hasher.update("hello");
+        hasher.update(vec![1u8, 2, 3]);
         
         let hash = hasher.digest().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
@@ -447,15 +408,15 @@ mod tests {
     fn test_api_comparison() {
         // Manual enum construction (still works)
         let mut explicit_style = PallasHasher::new();
-        explicit_style.update(PallasInput::ScalarField(ark_pallas::Fr::from(42u64))).unwrap();
-        explicit_style.update(PallasInput::Primitive(RustInput::Bool(true))).unwrap();
-        explicit_style.update(PallasInput::Primitive(RustInput::from_string_slice("test"))).unwrap();
+        explicit_style.update(PallasInput::ScalarField(ark_pallas::Fr::from(42u64)));
+        explicit_style.update(PallasInput::Primitive(RustInput::Bool(true)));
+        explicit_style.update(PallasInput::Primitive(RustInput::from_string_slice("test")));
         
         // Clean unified API (recommended)
         let mut unified_style = PallasHasher::new();
-        unified_style.update(ark_pallas::Fr::from(42u64)).unwrap();  // Direct!
-        unified_style.update(true).unwrap();                         // Natural!  
-        unified_style.update("test").unwrap();                       // Intuitive!
+        unified_style.update(ark_pallas::Fr::from(42u64));  // Direct!
+        unified_style.update(true);                         // Natural!  
+        unified_style.update("test");                       // Intuitive!
         
         // Both produce the same result
         assert_eq!(explicit_style.digest().unwrap(), unified_style.digest().unwrap());
@@ -468,13 +429,13 @@ mod tests {
         let mut bn254 = crate::types::BN254Hasher::new();
         
         // Same API works for all curves thanks to generic implementations
-        pallas.update(42u64).expect("Pallas u64");
-        pallas.update(true).expect("Pallas bool");
-        pallas.update("hello").expect("Pallas string");
+        pallas.update(42u64);
+        pallas.update(true);
+        pallas.update("hello");
         
-        bn254.update(42u64).expect("BN254 u64");
-        bn254.update(true).expect("BN254 bool");
-        bn254.update("hello").expect("BN254 string");
+        bn254.update(42u64);
+        bn254.update(true);
+        bn254.update("hello");
         
         // Different curves produce different hashes for same input
         let pallas_hash = pallas.digest().expect("Pallas digest");
@@ -492,17 +453,17 @@ mod tests {
         let c = ark_pallas::Fr::from(3u64);
         let d = ark_pallas::Fr::from(4u64);
         
-        hasher.update(PallasInput::ScalarField(a)).expect("Failed to update hasher");
-        hasher.update(PallasInput::ScalarField(b)).expect("Failed to update hasher");
-        hasher.update(PallasInput::ScalarField(c)).expect("Failed to update hasher");
-        hasher.update(PallasInput::ScalarField(d)).expect("Failed to update hasher");
+        hasher.update(PallasInput::ScalarField(a));
+        hasher.update(PallasInput::ScalarField(b));
+        hasher.update(PallasInput::ScalarField(c));
+        hasher.update(PallasInput::ScalarField(d));
         
         let hash_abcd = hasher.digest().expect("Failed to compute hash");
         
         // Hash just the last two elements
         let mut hasher2 = PallasHasher::new();
-        hasher2.update(PallasInput::ScalarField(c)).expect("Failed to update hasher");
-        hasher2.update(PallasInput::ScalarField(d)).expect("Failed to update hasher");
+        hasher2.update(PallasInput::ScalarField(c));
+        hasher2.update(PallasInput::ScalarField(d));
         
         let hash_cd = hasher2.digest().expect("Failed to compute hash");
         
@@ -518,9 +479,9 @@ mod tests {
         let base = ark_pallas::Fq::from(100u64);
         let generator = ark_pallas::Affine::generator();
         
-        hasher.update(PallasInput::ScalarField(scalar)).expect("Failed to update hasher");
-        hasher.update(PallasInput::BaseField(base)).expect("Failed to update hasher");
-        hasher.update(PallasInput::CurvePoint(generator)).expect("Failed to update hasher");
+        hasher.update(PallasInput::ScalarField(scalar));
+        hasher.update(PallasInput::BaseField(base));
+        hasher.update(PallasInput::CurvePoint(generator));
         
         let hash = hasher.digest().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
@@ -535,8 +496,8 @@ mod tests {
         let pallas_scalar = ark_pallas::Fr::from(123u64);
         let bn254_scalar = ark_bn254::Fr::from(123u64);
         
-        pallas_hasher.update(PallasInput::ScalarField(pallas_scalar)).expect("Failed to update hasher");
-        bn254_hasher.update(BN254Input::ScalarField(bn254_scalar)).expect("Failed to update hasher");
+        pallas_hasher.update(PallasInput::ScalarField(pallas_scalar));
+        bn254_hasher.update(BN254Input::ScalarField(bn254_scalar));
         
         let pallas_hash = pallas_hasher.digest().expect("Failed to compute hash");
         let bn254_hash = bn254_hasher.digest().expect("Failed to compute hash");
@@ -550,7 +511,7 @@ mod tests {
         // Test that Default trait works for convenient initialization
         let mut hasher: PallasHasher = Default::default();
         
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).expect("Failed to update hasher");
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
         let hash = hasher.digest().expect("Failed to compute hash");
         
         assert_ne!(hash, ark_pallas::Fq::zero());
@@ -561,11 +522,11 @@ mod tests {
         let mut hasher = PallasHasher::new();
         
         // First hash
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64))).expect("Failed to update hasher");
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64)));
         let hash1 = hasher.digest().expect("Failed to compute hash");
         
         // Second hash (now includes both elements since digest preserves state)
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64))).expect("Failed to update hasher");
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64)));
         let hash2 = hasher.digest().expect("Failed to compute hash");
         
         // Should be different because hash2 contains both elements
@@ -603,7 +564,7 @@ mod tests {
         let mut hasher = PallasHasher::new();
         
         // Add some data
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).expect("Failed to update hasher");
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
         
         // Get hash - state should be preserved
         let first_hash = hasher.digest().expect("Failed to get first digest");
@@ -613,7 +574,7 @@ mod tests {
         assert!(hasher.element_count() > 0, "State was not preserved after digest");
         
         // Add more data
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(100u64))).expect("Failed to update hasher");
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(100u64)));
         
         // Second digest should be different (contains both elements)
         let second_hash = hasher.digest().expect("Failed to compute second hash");
@@ -624,7 +585,7 @@ mod tests {
         
         // Test finalize (consumes hasher)
         let mut hasher2 = PallasHasher::new();
-        hasher2.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).expect("Failed to update hasher");
+        hasher2.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
         let finalized = hasher2.finalize().expect("Failed to finalize");
         
         // Should match the first hash (same single input)
