@@ -16,7 +16,7 @@ fn test_string_length_limits() {
     const MAX_STRING_LEN: usize = 1_000_000;
     let oversized_string = "x".repeat(MAX_STRING_LEN + 1);
     
-    let result = hasher.update_primitive(RustInput::from_string_slice(&oversized_string));
+    let result = hasher.update(oversized_string);
     
     match result {
         Err(e) => {
@@ -37,7 +37,7 @@ fn test_byte_array_length_limits() {
     const MAX_BYTES_LEN: usize = 10_000_000;
     let oversized_bytes = vec![0xAB; MAX_BYTES_LEN + 1];
     
-    let result = hasher.update_primitive(RustInput::from_bytes(&oversized_bytes));
+    let result = hasher.update(oversized_bytes);
     
     match result {
         Err(e) => {
@@ -58,7 +58,7 @@ fn test_processing_time_bounds() {
     
     let start_time = Instant::now();
     
-    let result = hasher.update_primitive(RustInput::from_bytes(&large_input));
+    let result = hasher.update(large_input);
     assert!(result.is_ok(), "Failed to process large but reasonable input");
     
     let _hash = hasher.digest().unwrap();
@@ -80,7 +80,7 @@ fn test_memory_usage_bounds() {
         let memory_estimate = size + 1024;
         max_memory_estimate = max_memory_estimate.max(memory_estimate);
         
-        let result = hasher.update_primitive(RustInput::from_bytes(&test_data));
+        let result = hasher.update(test_data);
         assert!(result.is_ok(), "Failed to process data of size {}", size);
         
         let _hash = hasher.digest().unwrap();
@@ -100,7 +100,7 @@ fn test_repeated_large_input_protection() {
         
         let input = vec![(i % 256) as u8; 10_000];
         
-        let result = hasher.update_primitive(RustInput::from_bytes(&input));
+        let result = hasher.update(input);
         assert!(result.is_ok(), "Failed at iteration {}", i);
         
         let _hash = hasher.digest().unwrap();
@@ -117,13 +117,13 @@ fn test_repeated_large_input_protection() {
 fn test_input_edge_case_validation() {
     let mut hasher = PallasHasher::new();
     
-    assert!(hasher.update_primitive(RustInput::from_string_slice("")).is_ok());
-    assert!(hasher.update_primitive(RustInput::from_bytes(&[])).is_ok());
-    assert!(hasher.update_primitive(RustInput::U64(0)).is_ok());
-    assert!(hasher.update_primitive(RustInput::I64(0)).is_ok());
-    assert!(hasher.update_primitive(RustInput::U64(u64::MAX)).is_ok());
-    assert!(hasher.update_primitive(RustInput::I64(i64::MAX)).is_ok());
-    assert!(hasher.update_primitive(RustInput::I64(i64::MIN)).is_ok());
+    assert!(hasher.update("").is_ok());
+    assert!(hasher.update(Vec::<u8>::new()).is_ok());
+    assert!(hasher.update(0u64).is_ok());
+    assert!(hasher.update(0i64).is_ok());
+    assert!(hasher.update(u64::MAX).is_ok());
+    assert!(hasher.update(i64::MAX).is_ok());
+    assert!(hasher.update(i64::MIN).is_ok());
     
     let hash = hasher.digest();
     assert!(hash.is_ok(), "Failed to complete hash with edge case inputs");
@@ -140,7 +140,7 @@ fn test_invalid_utf8_handling() {
         0xC0, 0x80,
     ];
     
-    let result = hasher.update_primitive(RustInput::from_bytes(&invalid_utf8));
+    let result = hasher.update(invalid_utf8);
     assert!(result.is_ok(), "Byte arrays with invalid UTF-8 should be accepted");
     
     let hash = hasher.digest();
@@ -166,7 +166,7 @@ fn test_concurrent_input_validation() {
             let input_size = (thread_id + 1) * 1000;
             let input_data = vec![thread_id as u8; input_size];
             
-            let result = hasher.update_primitive(RustInput::from_bytes(&input_data));
+            let result = hasher.update(input_data);
             
             if result.is_ok() {
                 let hash = hasher.digest();
@@ -197,12 +197,12 @@ fn test_concurrent_input_validation() {
 fn test_state_consistency_after_validation_errors() {
     let mut hasher = PallasHasher::new();
     
-    hasher.update_primitive(RustInput::U64(12345)).unwrap();
+    hasher.update(12345u64).unwrap();
     
     let huge_data = vec![0u8; 1_000_000];
-    let _error_result = hasher.update_primitive(RustInput::from_bytes(&huge_data));
+    let _error_result = hasher.update(huge_data);
     
-    let result = hasher.update_primitive(RustInput::U64(67890));
+    let result = hasher.update(67890u64);
     assert!(result.is_ok(), "Hasher state inconsistent after validation error");
     
     let hash = hasher.digest();
@@ -219,7 +219,7 @@ fn test_validation_performance_consistency() {
         let test_data = vec![round as u8; 10000];
         
         let start = Instant::now();
-        let result = hasher.update_primitive(RustInput::from_bytes(&test_data));
+        let result = hasher.update(test_data);
         let _hash = hasher.digest().unwrap();
         let elapsed = start.elapsed();
         
@@ -247,19 +247,19 @@ fn test_consistent_resource_limits() {
         ("large_string", Box::new(|| {
             let mut hasher = PallasHasher::new();
             let large_string = "x".repeat(500_000);
-            hasher.update_primitive(RustInput::from_string_slice(&large_string))?;
+            hasher.update(large_string)?;
             Ok(())
         })),
         ("large_bytes", Box::new(|| {
             let mut hasher = PallasHasher::new();
             let large_bytes = vec![0xAB; 500_000];
-            hasher.update_primitive(RustInput::from_bytes(&large_bytes))?;
+            hasher.update(large_bytes)?;
             Ok(())
         })),
         ("many_small_inputs", Box::new(|| {
             let mut hasher = PallasHasher::new();
             for i in 0..1000 {
-                let result = hasher.update_primitive(RustInput::from_bytes(&vec![i as u8; 500]));
+                let result = hasher.update(vec![i as u8; 500]);
                 result?;
             }
             Ok(())

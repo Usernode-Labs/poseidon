@@ -8,12 +8,12 @@ fn test_primitive_bool_hashing() {
     let mut hasher = PallasHasher::new();
     
     // Test single boolean
-    hasher.update_primitive(RustInput::Bool(true)).expect("Failed to update with bool");
+    hasher.update(true).expect("Failed to update with bool");
     let hash1 = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash1, ark_pallas::Fq::zero());
     
     // Test different boolean value should produce different hash
-    hasher.update_primitive(RustInput::Bool(false)).expect("Failed to update with bool");
+    hasher.update(false).expect("Failed to update with bool");
     let hash2 = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash1, hash2);
 }
@@ -23,10 +23,10 @@ fn test_primitive_integer_hashing() {
     let mut hasher = PallasHasher::new();
     
     // Test various integer types
-    hasher.update_primitive(RustInput::U8(42)).expect("Failed to update with u8");
-    hasher.update_primitive(RustInput::U16(1000)).expect("Failed to update with u16");
-    hasher.update_primitive(RustInput::U32(100000)).expect("Failed to update with u32");
-    hasher.update_primitive(RustInput::U64(10000000000u64)).expect("Failed to update with u64");
+    hasher.update(42u8).expect("Failed to update with u8");
+    hasher.update(1000u16).expect("Failed to update with u16");
+    hasher.update(100000u32).expect("Failed to update with u32");
+    hasher.update(10000000000u64).expect("Failed to update with u64");
     
     let hash = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash, ark_pallas::Fq::zero());
@@ -37,10 +37,10 @@ fn test_primitive_signed_integer_hashing() {
     let mut hasher = PallasHasher::new();
     
     // Test signed integers including negative values
-    hasher.update_primitive(RustInput::I8(-42)).expect("Failed to update with i8");
-    hasher.update_primitive(RustInput::I16(-1000)).expect("Failed to update with i16");
-    hasher.update_primitive(RustInput::I32(-100000)).expect("Failed to update with i32");
-    hasher.update_primitive(RustInput::I64(-10000000000i64)).expect("Failed to update with i64");
+    hasher.update(-42i8).expect("Failed to update with i8");
+    hasher.update(-1000i16).expect("Failed to update with i16");
+    hasher.update(-100000i32).expect("Failed to update with i32");
+    hasher.update(-10000000000i64).expect("Failed to update with i64");
     
     let hash = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash, ark_pallas::Fq::zero());
@@ -49,8 +49,8 @@ fn test_primitive_signed_integer_hashing() {
     let mut hasher1 = PallasHasher::new();
     let mut hasher2 = PallasHasher::new();
     
-    hasher1.update_primitive(RustInput::I32(42)).expect("Failed to update with positive i32");
-    hasher2.update_primitive(RustInput::I32(-42)).expect("Failed to update with negative i32");
+    hasher1.update(42i32).expect("Failed to update with positive i32");
+    hasher2.update(-42i32).expect("Failed to update with negative i32");
     
     let hash1 = hasher1.digest().expect("Failed to digest hash");
     let hash2 = hasher2.digest().expect("Failed to digest hash");
@@ -62,17 +62,17 @@ fn test_primitive_string_hashing() {
     let mut hasher = PallasHasher::new();
     
     // Test string slice
-    hasher.update_primitive(RustInput::from_string_slice("hello world")).expect("Failed to update with string slice");
+    hasher.update("hello world").expect("Failed to update with string slice");
     let hash1 = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash1, ark_pallas::Fq::zero());
     
     // Test owned string
-    hasher.update_primitive(RustInput::String("goodbye world".to_string())).expect("Failed to update with owned string");
+    hasher.update("goodbye world".to_string()).expect("Failed to update with owned string");
     let hash2 = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash1, hash2);
     
     // Test empty string
-    hasher.update_primitive(RustInput::from_string_slice("")).expect("Failed to update with empty string");
+    hasher.update("").expect("Failed to update with empty string");
     let hash3 = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash3, ark_pallas::Fq::zero());
 }
@@ -83,13 +83,13 @@ fn test_primitive_bytes_hashing() {
     
     // Test byte slice
     let bytes = [1, 2, 3, 4, 5, 255, 0, 128];
-    hasher.update_primitive(RustInput::from_bytes(&bytes)).expect("Failed to update with bytes");
+    hasher.update(bytes.to_vec()).expect("Failed to update with bytes");
     let hash1 = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash1, ark_pallas::Fq::zero());
     
     // Test different byte slice should produce different hash
     let bytes2 = [1, 2, 3, 4, 5, 254, 0, 128]; // Changed one byte
-    hasher.update_primitive(RustInput::from_bytes(&bytes2)).expect("Failed to update with bytes");
+    hasher.update(bytes2.to_vec()).expect("Failed to update with bytes");
     let hash2 = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash1, hash2);
 }
@@ -99,10 +99,10 @@ fn test_primitive_enum_api() {
     let mut hasher = PallasHasher::new();
     
     // Test using the RustInput enum API
-    hasher.update_primitive(RustInput::Bool(true)).expect("Failed to update with primitive bool");
-    hasher.update_primitive(RustInput::U64(12345)).expect("Failed to update with primitive u64");
-    hasher.update_primitive(RustInput::String("test".to_string())).expect("Failed to update with primitive string");
-    hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3])).expect("Failed to update with primitive bytes");
+    hasher.update(true).expect("Failed to update with primitive bool");
+    hasher.update(12345u64).expect("Failed to update with primitive u64");
+    hasher.update("test".to_string()).expect("Failed to update with primitive string");
+    hasher.update(vec![1, 2, 3]).expect("Failed to update with primitive bytes");
     
     let hash = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash, ark_pallas::Fq::zero());
@@ -117,9 +117,9 @@ fn test_mixed_field_and_primitive_types() {
     let base = ark_pallas::Fq::from(200u64);
     
     hasher.update(PallasInput::ScalarField(scalar)).expect("Failed to update with scalar field");
-    hasher.update_primitive(RustInput::U64(300)).expect("Failed to update with u64");
+    hasher.update(300u64).expect("Failed to update with u64");
     hasher.update(PallasInput::BaseField(base)).expect("Failed to update with base field");
-    hasher.update_primitive(RustInput::from_string_slice("mixed")).expect("Failed to update with string");
+    hasher.update("mixed").expect("Failed to update with string");
     
     let hash = hasher.digest().expect("Failed to digest hash");
     assert_ne!(hash, ark_pallas::Fq::zero());
@@ -139,8 +139,8 @@ fn test_byte_efficient_vs_circuit_friendly_modes() {
     });
     
     // Same input to both hashers
-    hasher_byte_efficient.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4, 5])).expect("Failed to update byte efficient hasher");
-    hasher_circuit_friendly.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4, 5])).expect("Failed to update circuit friendly hasher");
+    hasher_byte_efficient.update(vec![1, 2, 3, 4, 5]).expect("Failed to update byte efficient hasher");
+    hasher_circuit_friendly.update(vec![1, 2, 3, 4, 5]).expect("Failed to update circuit friendly hasher");
     
     let hash_byte_efficient = hasher_byte_efficient.digest().expect("Failed to digest byte efficient hash");
     let hash_circuit_friendly = hasher_circuit_friendly.digest().expect("Failed to digest circuit friendly hash");
@@ -152,26 +152,83 @@ fn test_byte_efficient_vs_circuit_friendly_modes() {
 #[test]
 fn test_deterministic_hashing() {
     // Same inputs should always produce the same hash
-    let test_inputs = [
-        (RustInput::Bool(true), "bool"),
-        (RustInput::U64(12345), "u64"),
-        (RustInput::I64(-6789), "i64"),
-        (RustInput::String("deterministic test".to_string()), "string"),
-        (RustInput::from_bytes(&[1, 2, 3, 4, 5]), "bytes"),
-    ];
+    // Test different input types separately due to type constraints
     
-    for (input, description) in &test_inputs {
+    // Test bool
+    {
+        let input = true;
         let mut hasher1 = PallasHasher::new();
         let mut hasher2 = PallasHasher::new();
         
-        hasher1.update_primitive(input.clone()).unwrap_or_else(|_| panic!("Failed to update hasher1 with {}", description));
-        hasher2.update_primitive(input.clone()).unwrap_or_else(|_| panic!("Failed to update hasher2 with {}", description));
+        hasher1.update(input).unwrap();
+        hasher2.update(input).unwrap();
         
-        let hash1 = hasher1.digest().unwrap_or_else(|_| panic!("Failed to digest hash1 for {}", description));
-        let hash2 = hasher2.digest().unwrap_or_else(|_| panic!("Failed to digest hash2 for {}", description));
+        let hash1 = hasher1.digest().unwrap();
+        let hash2 = hasher2.digest().unwrap();
         
-        assert_eq!(hash1, hash2, "Hashes should be deterministic for {}", description);
+        assert_eq!(hash1, hash2, "Bool hashes should be deterministic");
     }
+    
+    // Test u64
+    {
+        let input = 12345u64;
+        let mut hasher1 = PallasHasher::new();
+        let mut hasher2 = PallasHasher::new();
+        
+        hasher1.update(input).unwrap();
+        hasher2.update(input).unwrap();
+        
+        let hash1 = hasher1.digest().unwrap();
+        let hash2 = hasher2.digest().unwrap();
+        
+        assert_eq!(hash1, hash2, "U64 hashes should be deterministic");
+    }
+    
+    // Test i64
+    {
+        let input = -6789i64;
+        let mut hasher1 = PallasHasher::new();
+        let mut hasher2 = PallasHasher::new();
+        
+        hasher1.update(input).unwrap();
+        hasher2.update(input).unwrap();
+        
+        let hash1 = hasher1.digest().unwrap();
+        let hash2 = hasher2.digest().unwrap();
+        
+        assert_eq!(hash1, hash2, "I64 hashes should be deterministic");
+    }
+    
+    // Test string
+    {
+        let input = "deterministic test".to_string();
+        let mut hasher1 = PallasHasher::new();
+        let mut hasher2 = PallasHasher::new();
+        
+        hasher1.update(input.clone()).unwrap();
+        hasher2.update(input).unwrap();
+        
+        let hash1 = hasher1.digest().unwrap();
+        let hash2 = hasher2.digest().unwrap();
+        
+        assert_eq!(hash1, hash2, "String hashes should be deterministic");
+    }
+    
+    // Test bytes
+    {
+        let input = vec![1, 2, 3, 4, 5];
+        let mut hasher1 = PallasHasher::new();
+        let mut hasher2 = PallasHasher::new();
+        
+        hasher1.update(input.clone()).unwrap();
+        hasher2.update(input).unwrap();
+        
+        let hash1 = hasher1.digest().unwrap();
+        let hash2 = hasher2.digest().unwrap();
+        
+        assert_eq!(hash1, hash2, "Bytes hashes should be deterministic");
+    }
+    
 }
 
 #[test]
@@ -179,12 +236,12 @@ fn test_hasher_reuse_after_digest() {
     let mut hasher = PallasHasher::new();
     
     // First hash
-    hasher.update_primitive(RustInput::U64(100)).expect("Failed to update with first u64");
+    hasher.update(100u64).expect("Failed to update with first u64");
     let hash1 = hasher.finalize().expect("Failed to finalize first hash");
     
     // Create new hasher for second hash
     let mut hasher2 = PallasHasher::new();
-    hasher2.update_primitive(RustInput::U64(200)).expect("Failed to update with second u64");
+    hasher2.update(200u64).expect("Failed to update with second u64");
     let hash2 = hasher2.finalize().expect("Failed to finalize second hash");
     
     // Should produce different hashes
@@ -192,7 +249,7 @@ fn test_hasher_reuse_after_digest() {
     
     // Third hash with same input as first should match first hash
     let mut hasher3 = PallasHasher::new();
-    hasher3.update_primitive(RustInput::U64(100)).expect("Failed to update with third u64");
+    hasher3.update(100u64).expect("Failed to update with third u64");
     let hash3 = hasher3.finalize().expect("Failed to finalize third hash");
     
     assert_eq!(hash1, hash3);
@@ -204,11 +261,11 @@ fn test_large_data_handling() {
     
     // Test with large string
     let large_string = "a".repeat(1000);
-    hasher.update_primitive(RustInput::from_string_slice(&large_string)).expect("Failed to update with large string");
+    hasher.update(large_string).expect("Failed to update with large string");
     
     // Test with large byte array
     let large_bytes: Vec<u8> = (0..1000).map(|i| (i % 256) as u8).collect();
-    hasher.update_primitive(RustInput::from_bytes(&large_bytes)).expect("Failed to update with large bytes");
+    hasher.update(large_bytes).expect("Failed to update with large bytes");
     
     let hash = hasher.digest().expect("Failed to digest hash for large data");
     assert_ne!(hash, ark_pallas::Fq::zero());
@@ -219,14 +276,14 @@ fn test_edge_cases() {
     let mut hasher = PallasHasher::new();
     
     // Test with zeros
-    hasher.update_primitive(RustInput::U64(0)).expect("Failed to update with zero u64");
-    hasher.update_primitive(RustInput::I64(0)).expect("Failed to update with zero i64");
+    hasher.update(0u64).expect("Failed to update with zero u64");
+    hasher.update(0i64).expect("Failed to update with zero i64");
     
     // Test with maximum values
-    hasher.update_primitive(RustInput::U8(u8::MAX)).expect("Failed to update with max u8");
-    hasher.update_primitive(RustInput::U64(u64::MAX)).expect("Failed to update with max u64");
-    hasher.update_primitive(RustInput::I64(i64::MAX)).expect("Failed to update with max i64");
-    hasher.update_primitive(RustInput::I64(i64::MIN)).expect("Failed to update with min i64");
+    hasher.update(u8::MAX).expect("Failed to update with max u8");
+    hasher.update(u64::MAX).expect("Failed to update with max u64");
+    hasher.update(i64::MAX).expect("Failed to update with max i64");
+    hasher.update(i64::MIN).expect("Failed to update with min i64");
     
     let hash = hasher.digest().expect("Failed to digest hash for edge cases");
     assert_ne!(hash, ark_pallas::Fq::zero());
@@ -237,8 +294,8 @@ fn test_empty_inputs() {
     let mut hasher = PallasHasher::new();
     
     // Test empty string and empty bytes
-    hasher.update_primitive(RustInput::from_string_slice("")).expect("Failed to update with empty string");
-    hasher.update_primitive(RustInput::from_bytes(&[])).expect("Failed to update with empty bytes");
+    hasher.update("").expect("Failed to update with empty string");
+    hasher.update(Vec::<u8>::new()).expect("Failed to update with empty bytes");
     
     let hash = hasher.digest().expect("Failed to digest hash for empty inputs");
     // Even empty inputs should produce a non-zero hash due to length prefixes
@@ -252,13 +309,13 @@ fn test_order_dependency() {
     let mut hasher2 = PallasHasher::new();
     
     // Same data in different order
-    hasher1.update_primitive(RustInput::U64(1)).expect("Failed to update hasher1");
-    hasher1.update_primitive(RustInput::U64(2)).expect("Failed to update hasher1");
-    hasher1.update_primitive(RustInput::from_string_slice("test")).expect("Failed to update hasher1");
+    hasher1.update(1u64).expect("Failed to update hasher1");
+    hasher1.update(2u64).expect("Failed to update hasher1");
+    hasher1.update("test").expect("Failed to update hasher1");
     
-    hasher2.update_primitive(RustInput::from_string_slice("test")).expect("Failed to update hasher2");
-    hasher2.update_primitive(RustInput::U64(2)).expect("Failed to update hasher2");
-    hasher2.update_primitive(RustInput::U64(1)).expect("Failed to update hasher2");
+    hasher2.update("test").expect("Failed to update hasher2");
+    hasher2.update(2u64).expect("Failed to update hasher2");
+    hasher2.update(1u64).expect("Failed to update hasher2");
     
     let hash1 = hasher1.digest().expect("Failed to digest hash1");
     let hash2 = hasher2.digest().expect("Failed to digest hash2");

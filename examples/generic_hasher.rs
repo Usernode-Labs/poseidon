@@ -3,20 +3,17 @@
 use poseidon_hash::prelude::*;
 
 fn main() -> Result<(), HasherError> {
-    let data = vec![RustInput::U64(42), RustInput::from_string_slice("test")];
-    
-    // Generic function works with any curve
-    let pallas_hash = hash_generic::<PallasHasher, ark_pallas::Fq, PallasInput>(&data)?;
-    let bn254_hash = hash_generic::<BN254Hasher, ark_bn254::Fq, BN254Input>(&data)?;
+    // Different curves with same data
+    let pallas_hash = hash_pallas()?;
+    let bn254_hash = hash_bn254()?;
     
     println!("Pallas: {}", pallas_hash);
     println!("BN254:  {}", bn254_hash);
     
     // Different packing modes
-    let byte_efficient = hash_with_config::<PallasHasher, ark_pallas::Fq, PallasInput>(
-        &data, PackingConfig::default())?;
-    let circuit_friendly = hash_with_config::<PallasHasher, ark_pallas::Fq, PallasInput>(
-        &data, PackingConfig { mode: PackingMode::CircuitFriendly, ..Default::default() })?;
+    let byte_efficient = hash_pallas_with_config(PackingConfig::default())?;
+    let circuit_friendly = hash_pallas_with_config(
+        PackingConfig { mode: PackingMode::CircuitFriendly, ..Default::default() })?;
     
     println!("Byte-efficient:   {}", byte_efficient);
     println!("Circuit-friendly: {}", circuit_friendly);
@@ -25,26 +22,23 @@ fn main() -> Result<(), HasherError> {
     Ok(())
 }
 
-fn hash_generic<H, F, I>(data: &[RustInput]) -> Result<String, HasherError>
-where
-    H: PoseidonHasher<F, I>,
-    F: ark_ff::PrimeField + std::fmt::Display,
-{
-    let mut hasher = H::new();
-    for item in data {
-        hasher.update_primitive(item.clone())?;
-    }
+fn hash_pallas() -> Result<String, HasherError> {
+    let mut hasher = PallasHasher::new();
+    hasher.update(42u64)?;
+    hasher.update("test")?;
     Ok(hasher.digest()?.to_string())
 }
 
-fn hash_with_config<H, F, I>(data: &[RustInput], config: PackingConfig) -> Result<String, HasherError>
-where
-    H: PoseidonHasher<F, I>,
-    F: ark_ff::PrimeField + std::fmt::Display,
-{
-    let mut hasher = H::new_with_config(config);
-    for item in data {
-        hasher.update_primitive(item.clone())?;
-    }
+fn hash_bn254() -> Result<String, HasherError> {
+    let mut hasher = BN254Hasher::new();
+    hasher.update(42u64)?;
+    hasher.update("test")?;
+    Ok(hasher.digest()?.to_string())
+}
+
+fn hash_pallas_with_config(config: PackingConfig) -> Result<String, HasherError> {
+    let mut hasher = PallasHasher::new_with_config(config);
+    hasher.update(42u64)?;
+    hasher.update("test")?;
     Ok(hasher.digest()?.to_string())
 }

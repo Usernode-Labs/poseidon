@@ -25,12 +25,12 @@
 //!
 //! let mut hasher = PallasHasher::new();
 //!
-//! // Clean enum-based API
-//! hasher.update_primitive(RustInput::Bool(true))?;
-//! hasher.update_primitive(RustInput::U64(12345))?;
-//! hasher.update_primitive(RustInput::String("hello".to_string()))?;
-//! hasher.update_primitive(RustInput::from_string_slice("hello"))?;
-//! hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4]))?;
+//! // Clean unified API
+//! hasher.update(true)?;
+//! hasher.update(12345u64)?;
+//! hasher.update("hello".to_string())?;
+//! hasher.update("hello")?;
+//! hasher.update(vec![1u8, 2, 3, 4])?;
 //!
 //! let hash = hasher.digest()?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
@@ -130,6 +130,25 @@ impl RustInput {
         Self::ByteSlice(bytes.to_vec())
     }
 }
+
+// Simple From implementations - much cleaner than 17 separate impls!
+impl From<bool> for RustInput { fn from(v: bool) -> Self { Self::Bool(v) } }
+impl From<u8> for RustInput { fn from(v: u8) -> Self { Self::U8(v) } }
+impl From<u16> for RustInput { fn from(v: u16) -> Self { Self::U16(v) } }
+impl From<u32> for RustInput { fn from(v: u32) -> Self { Self::U32(v) } }
+impl From<u64> for RustInput { fn from(v: u64) -> Self { Self::U64(v) } }
+impl From<u128> for RustInput { fn from(v: u128) -> Self { Self::U128(v) } }
+impl From<usize> for RustInput { fn from(v: usize) -> Self { Self::Usize(v) } }
+impl From<i8> for RustInput { fn from(v: i8) -> Self { Self::I8(v) } }
+impl From<i16> for RustInput { fn from(v: i16) -> Self { Self::I16(v) } }
+impl From<i32> for RustInput { fn from(v: i32) -> Self { Self::I32(v) } }
+impl From<i64> for RustInput { fn from(v: i64) -> Self { Self::I64(v) } }
+impl From<i128> for RustInput { fn from(v: i128) -> Self { Self::I128(v) } }
+impl From<isize> for RustInput { fn from(v: isize) -> Self { Self::Isize(v) } }
+impl From<String> for RustInput { fn from(v: String) -> Self { Self::String(v) } }
+impl From<&str> for RustInput { fn from(v: &str) -> Self { Self::Str(v.to_string()) } }
+impl From<Vec<u8>> for RustInput { fn from(v: Vec<u8>) -> Self { Self::Bytes(v) } }
+impl From<&[u8]> for RustInput { fn from(v: &[u8]) -> Self { Self::ByteSlice(v.to_vec()) } }
 
 /// Buffer for accumulating bytes before packing into field elements.
 /// 
@@ -299,6 +318,13 @@ impl PackingBuffer {
     pub fn len(&self) -> usize {
         self.bytes.len()
     }
+    
+    /// Returns whether the buffer is empty.
+    /// 
+    /// This is primarily for testing and debugging purposes.
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
 }
 
 /// Serialize a RustInput into bytes for packing.
@@ -358,7 +384,7 @@ mod tests {
         buffer.push_bool(true);
         
         assert_eq!(buffer.len(), 3);
-        assert!(buffer.len() > 0);
+        assert!(!buffer.is_empty());
     }
     
     #[test]
@@ -399,8 +425,7 @@ mod tests {
         let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>().unwrap();
         assert!(!field_elements.is_empty());
         
-        // Some bytes should remain
-        assert!(buffer.len() > 0 || buffer.len() == 0);
+        // Some bytes may or may not remain - that's expected
     }
     
     #[test]
@@ -431,7 +456,7 @@ mod tests {
         serialize_rust_input(&RustInput::U64(12345), &mut buffer).unwrap();
         serialize_rust_input(&RustInput::String("test".to_string()), &mut buffer).unwrap();
         
-        assert!(buffer.len() > 0);
+        assert!(!buffer.is_empty());
     }
     
     #[test]

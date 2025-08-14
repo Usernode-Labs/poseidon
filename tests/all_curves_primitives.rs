@@ -6,8 +6,8 @@ use ark_ff::Zero;
 #[test]
 fn test_pallas_primitives() {
     let mut hasher = PallasHasher::new();
-    hasher.update_primitive(RustInput::Bool(true)).expect("Failed to update");
-    hasher.update_primitive(RustInput::U64(12345)).expect("Failed to update");
+    hasher.update(true).expect("Failed to update");
+    hasher.update(12345u64).expect("Failed to update");
     let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
@@ -15,8 +15,8 @@ fn test_pallas_primitives() {
 #[test]
 fn test_vesta_primitives() {
     let mut hasher = VestaHasher::new();
-    hasher.update_primitive(RustInput::Bool(false)).expect("Failed to update");
-    hasher.update_primitive(RustInput::U64(67890)).expect("Failed to update");
+    hasher.update(false).expect("Failed to update");
+    hasher.update(67890u64).expect("Failed to update");
     let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_vesta::Fq::zero());
 }
@@ -24,8 +24,8 @@ fn test_vesta_primitives() {
 #[test]
 fn test_bn254_primitives() {
     let mut hasher = BN254Hasher::new();
-    hasher.update_primitive(RustInput::I32(-123)).expect("Failed to update");
-    hasher.update_primitive(RustInput::from_string_slice("bn254")).expect("Failed to update");
+    hasher.update(-123i32).expect("Failed to update");
+    hasher.update("bn254").expect("Failed to update");
     let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_bn254::Fq::zero());
 }
@@ -33,8 +33,8 @@ fn test_bn254_primitives() {
 #[test]
 fn test_bls12_381_primitives() {
     let mut hasher = BLS12_381Hasher::new();
-    hasher.update_primitive(RustInput::U128(999999999999u128)).expect("Failed to update");
-    hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4])).expect("Failed to update");
+    hasher.update(999999999999u128).expect("Failed to update");
+    hasher.update(vec![1, 2, 3, 4]).expect("Failed to update");
     let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_bls12_381::Fq::zero());
 }
@@ -42,8 +42,8 @@ fn test_bls12_381_primitives() {
 #[test]
 fn test_bls12_377_primitives() {
     let mut hasher = BLS12_377Hasher::new();
-    hasher.update_primitive(RustInput::I64(-987654321)).expect("Failed to update");
-    hasher.update_primitive(RustInput::String("bls12_377".to_string())).expect("Failed to update");
+    hasher.update(-987654321i64).expect("Failed to update");
+    hasher.update("bls12_377".to_string()).expect("Failed to update");
     let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_bls12_377::Fq::zero());
 }
@@ -64,11 +64,11 @@ fn test_all_curves_with_config() {
     
     let test_bytes = &[42, 100, 255];
     
-    pallas.update_primitive(RustInput::from_bytes(test_bytes)).expect("Pallas failed");
-    vesta.update_primitive(RustInput::from_bytes(test_bytes)).expect("Vesta failed");
-    bn254.update_primitive(RustInput::from_bytes(test_bytes)).expect("BN254 failed");
-    bls12_381.update_primitive(RustInput::from_bytes(test_bytes)).expect("BLS12-381 failed");
-    bls12_377.update_primitive(RustInput::from_bytes(test_bytes)).expect("BLS12-377 failed");
+    pallas.update(test_bytes.to_vec()).expect("Pallas failed");
+    vesta.update(test_bytes.to_vec()).expect("Vesta failed");
+    bn254.update(test_bytes.to_vec()).expect("BN254 failed");
+    bls12_381.update(test_bytes.to_vec()).expect("BLS12-381 failed");
+    bls12_377.update(test_bytes.to_vec()).expect("BLS12-377 failed");
     
     // All should produce non-zero hashes
     assert_ne!(pallas.digest().expect("Pallas digest failed"), ark_pallas::Fq::zero());
@@ -81,15 +81,15 @@ fn test_all_curves_with_config() {
 #[test]
 fn test_cross_curve_different_hashes() {
     // Same input should produce different hashes across different curves
-    let input = RustInput::U64(123456789);
+    let input = 123456789u64;
     
     let mut pallas = PallasHasher::new();
     let mut vesta = VestaHasher::new();
     let mut bn254 = BN254Hasher::new();
     
-    pallas.update_primitive(input.clone()).expect("Pallas failed");
-    vesta.update_primitive(input.clone()).expect("Vesta failed");
-    bn254.update_primitive(input).expect("BN254 failed");
+    pallas.update(input).expect("Pallas failed");
+    vesta.update(input).expect("Vesta failed");
+    bn254.update(input).expect("BN254 failed");
     
     let pallas_hash = pallas.digest().expect("Pallas digest failed");
     let vesta_hash = vesta.digest().expect("Vesta digest failed");

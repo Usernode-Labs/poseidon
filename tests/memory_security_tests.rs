@@ -14,8 +14,8 @@ fn test_zeroization_implementation() {
     let test_scalar = ark_pallas::Fr::from(0x123456789ABCDEFu64);
     hasher.update(PallasInput::ScalarField(test_scalar)).unwrap();
     
-    hasher.update_primitive(RustInput::from_string_slice("sensitive_data")).unwrap();
-    hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4, 5])).unwrap();
+    hasher.update("sensitive_data").unwrap();
+    hasher.update(vec![1, 2, 3, 4, 5]).unwrap();
     
     let hash1 = hasher.digest().unwrap();
     
@@ -29,7 +29,7 @@ fn test_zeroization_implementation() {
     
     assert_eq!(hasher.element_count(), 0);
     
-    hasher.update_primitive(RustInput::Bool(true)).unwrap();
+    hasher.update(true).unwrap();
     let _hash3 = hasher.digest().unwrap();
 }
 

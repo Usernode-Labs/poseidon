@@ -6,16 +6,16 @@ fn main() -> Result<(), HasherError> {
     // Create a hasher
     let mut hasher = PallasHasher::new();
     
-    // Hash field elements
-    hasher.update(PallasInput::ScalarField(ark_pallas::Fr::from(42u64)))?;
-    hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(100u64)))?;
+    // Hash field elements - clean direct API!
+    hasher.update(ark_pallas::Fr::from(42u64))?;
+    hasher.update(ark_pallas::Fq::from(100u64))?;
     
     let hash = hasher.digest()?;
     println!("Hash: {}", hash);
     
-    // Hash primitive types
-    hasher.update_primitive(RustInput::U64(123))?;
-    hasher.update_primitive(RustInput::from_string_slice("hello"))?;
+    // Hash primitive types  
+    hasher.update(123u64)?;
+    hasher.update("hello")?;
     
     let hash2 = hasher.digest()?;
     println!("Primitive hash: {}", hash2);

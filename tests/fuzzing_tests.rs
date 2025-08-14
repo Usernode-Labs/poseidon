@@ -23,7 +23,7 @@ fn test_random_byte_fuzzing() {
             random_bytes.push((seed >> 24) as u8);
         }
         
-        let result = hasher.update_primitive(RustInput::from_bytes(&random_bytes));
+        let result = hasher.update(random_bytes.clone());
         
         match result {
             Ok(_) => {
@@ -61,7 +61,7 @@ fn test_random_string_fuzzing() {
             }
         }
         
-        let result = hasher.update_primitive(RustInput::String(random_string.clone()));
+        let result = hasher.update(random_string.clone());
         
         if result.is_ok() {
             let hash_result = hasher.digest();
@@ -75,20 +75,62 @@ fn test_random_string_fuzzing() {
 fn test_integer_boundary_fuzzing() {
     let mut hasher = PallasHasher::new();
     
-    let boundary_values = vec![
-        RustInput::U8(0), RustInput::U8(127), RustInput::U8(255),
-        RustInput::U16(0), RustInput::U16(32767), RustInput::U16(65535),
-        RustInput::U32(0), RustInput::U32(2147483647), RustInput::U32(u32::MAX),
-        RustInput::U64(0), RustInput::U64(i64::MAX as u64), RustInput::U64(u64::MAX),
-        RustInput::I8(i8::MIN), RustInput::I8(0), RustInput::I8(i8::MAX),
-        RustInput::I16(i16::MIN), RustInput::I16(0), RustInput::I16(i16::MAX),
-        RustInput::I32(i32::MIN), RustInput::I32(0), RustInput::I32(i32::MAX),
-        RustInput::I64(i64::MIN), RustInput::I64(0), RustInput::I64(i64::MAX),
-    ];
+    // Test boundary values for different types separately due to type constraints
+    let u8_values = [0u8, 127u8, 255u8];
+    let u16_values = [0u16, 32767u16, 65535u16];
+    let u32_values = [0u32, 2147483647u32, u32::MAX];
+    let u64_values = [0u64, i64::MAX as u64, u64::MAX];
+    let i8_values = [i8::MIN, 0i8, i8::MAX];
+    let i16_values = [i16::MIN, 0i16, i16::MAX];
+    let i32_values = [i32::MIN, 0i32, i32::MAX];
+    let i64_values = [i64::MIN, 0i64, i64::MAX];
     
-    for (i, boundary_value) in boundary_values.iter().enumerate() {
-        let result = hasher.update_primitive(boundary_value.clone());
-        assert!(result.is_ok(), "Boundary value {} failed: {:?}", i, boundary_value);
+    // Test u8 values
+    for (i, &value) in u8_values.iter().enumerate() {
+        let result = hasher.update(value);
+        assert!(result.is_ok(), "u8 boundary value {} failed: {:?}", i, value);
+    }
+    
+    // Test u16 values  
+    for (i, &value) in u16_values.iter().enumerate() {
+        let result = hasher.update(value);
+        assert!(result.is_ok(), "u16 boundary value {} failed: {:?}", i, value);
+    }
+    
+    // Test u32 values
+    for (i, &value) in u32_values.iter().enumerate() {
+        let result = hasher.update(value);
+        assert!(result.is_ok(), "u32 boundary value {} failed: {:?}", i, value);
+    }
+    
+    // Test u64 values
+    for (i, &value) in u64_values.iter().enumerate() {
+        let result = hasher.update(value);
+        assert!(result.is_ok(), "u64 boundary value {} failed: {:?}", i, value);
+    }
+    
+    // Test i8 values
+    for (i, &value) in i8_values.iter().enumerate() {
+        let result = hasher.update(value);
+        assert!(result.is_ok(), "i8 boundary value {} failed: {:?}", i, value);
+    }
+    
+    // Test i16 values
+    for (i, &value) in i16_values.iter().enumerate() {
+        let result = hasher.update(value);
+        assert!(result.is_ok(), "i16 boundary value {} failed: {:?}", i, value);
+    }
+    
+    // Test i32 values
+    for (i, &value) in i32_values.iter().enumerate() {
+        let result = hasher.update(value);
+        assert!(result.is_ok(), "i32 boundary value {} failed: {:?}", i, value);
+    }
+    
+    // Test i64 values
+    for (i, &value) in i64_values.iter().enumerate() {
+        let result = hasher.update(value);
+        assert!(result.is_ok(), "i64 boundary value {} failed: {:?}", i, value);
     }
     
     let hash = hasher.digest();
@@ -158,10 +200,10 @@ fn test_mixed_input_fuzzing() {
             seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
             let input_type = seed % 6;
             
-            let input = match input_type {
-                0 => RustInput::Bool(seed % 2 == 0),
-                1 => RustInput::U64(seed),
-                2 => RustInput::I64(seed as i64),
+            let input_result = match input_type {
+                0 => hasher.update(seed % 2 == 0),
+                1 => hasher.update(seed),
+                2 => hasher.update(seed as i64),
                 3 => {
                     let len = (seed % 100) + 1;
                     let mut bytes = Vec::new();
@@ -169,7 +211,7 @@ fn test_mixed_input_fuzzing() {
                         seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                         bytes.push((seed >> 24) as u8);
                     }
-                    RustInput::from_bytes(&bytes)
+                    hasher.update(bytes)
                 },
                 4 => {
                     let len = (seed % 50) + 1;
@@ -177,18 +219,16 @@ fn test_mixed_input_fuzzing() {
                         seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                         char::from((seed % 94 + 32) as u8)
                     }).collect();
-                    RustInput::from_string_slice(&chars)
+                    hasher.update(chars)
                 },
                 5 => {
                     let field_element = ark_pallas::Fr::from(seed);
-                    let _ = hasher.update(PallasInput::ScalarField(field_element));
-                    continue;
+                    hasher.update(PallasInput::ScalarField(field_element))
                 },
-                _ => RustInput::U64(seed),
+                _ => hasher.update(seed),
             };
             
-            let result = hasher.update_primitive(input);
-            if result.is_err() {
+            if input_result.is_err() {
                 break;
             }
         }
@@ -212,7 +252,7 @@ fn test_byte_pattern_fuzzing() {
     ];
     
     for pattern in patterns.iter() {
-        let _ = hasher.update_primitive(RustInput::from_bytes(pattern));
+        let _ = hasher.update(pattern.clone());
     }
     
     let hash = hasher.digest();
@@ -225,7 +265,7 @@ fn test_byte_pattern_fuzzing() {
 fn test_large_input_fuzzing() {
     let mut hasher = PallasHasher::new();
     
-    hasher.update_primitive(RustInput::U64(12345)).unwrap();
+    hasher.update(12345u64).unwrap();
     
     let sizes = vec![1000, 10000, 50000];
     
@@ -241,7 +281,7 @@ fn test_large_input_fuzzing() {
         }).collect();
         
         let start_time = std::time::Instant::now();
-        let result = hasher.update_primitive(RustInput::from_bytes(&large_data));
+        let result = hasher.update(large_data.clone());
         let elapsed = start_time.elapsed();
         
         if result.is_err() || elapsed > std::time::Duration::from_secs(5) {
@@ -259,15 +299,15 @@ fn test_rapid_input_fuzzing() {
         let mut hasher = PallasHasher::new();
         
         for i in 0..1000 {
-            let input = match i % 4 {
-                0 => RustInput::Bool(i % 2 == 0),
-                1 => RustInput::U8((i % 256) as u8),
-                2 => RustInput::U16((i % 65536) as u16),
-                3 => RustInput::from_bytes(&[(i % 256) as u8; 3]),
-                _ => RustInput::U32(i as u32),
+            let result = match i % 4 {
+                0 => hasher.update(i % 2 == 0),
+                1 => hasher.update((i % 256) as u8),
+                2 => hasher.update((i % 65536) as u16),
+                3 => hasher.update(vec![(i % 256) as u8; 3]),
+                _ => hasher.update(i as u32),
             };
             
-            if hasher.update_primitive(input).is_err() {
+            if result.is_err() {
                 break;
             }
         }

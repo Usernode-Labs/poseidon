@@ -6,7 +6,7 @@
 
 use crate::hasher::{MultiFieldHasher, FieldInput, HasherResult};
 use crate::parameters::*;
-use crate::primitive::{RustInput, PackingConfig};
+use crate::primitive::PackingConfig;
 use ark_ff::PrimeField;
 use zeroize::ZeroizeOnDrop;
 
@@ -37,15 +37,13 @@ where
     #[doc(hidden)]
     fn inner_ref(&self) -> &dyn InnerHasher<F, I>;
     
-    /// Update the hasher with a field-specific input (Fr, Fq, or curve points).
-    fn update(&mut self, input: I) -> HasherResult<()> {
-        self.inner_mut().update_field_input(input)
+    /// Update the hasher with any compatible input.
+    /// 
+    /// This accepts field elements, curve points, primitives, or any type with a From implementation.
+    fn update<T: Into<I>>(&mut self, input: T) -> HasherResult<()> {
+        self.inner_mut().update_field_input(input.into())
     }
     
-    /// Update the hasher with a primitive Rust type.
-    fn update_primitive(&mut self, input: RustInput) -> HasherResult<()> {
-        self.inner_mut().update_primitive_input(input)
-    }
     
     /// Get the current hash result while preserving the hasher state.
     fn digest(&mut self) -> HasherResult<F> {
@@ -78,7 +76,6 @@ where
     F: PrimeField,
 {
     fn update_field_input(&mut self, input: I) -> HasherResult<()>;
-    fn update_primitive_input(&mut self, input: RustInput) -> HasherResult<()>;
     fn digest_result(&mut self) -> HasherResult<F>;
     fn reset_hasher(&mut self);
     fn get_element_count(&self) -> usize;
@@ -95,9 +92,6 @@ where
         self.update(input)
     }
     
-    fn update_primitive_input(&mut self, input: RustInput) -> HasherResult<()> {
-        self.update_primitive(input)
-    }
     
     fn digest_result(&mut self) -> HasherResult<F> {
         self.digest()
@@ -153,6 +147,27 @@ impl Default for PallasHasher {
 /// Type alias for Pallas curve field input enum.
 pub type PallasInput = FieldInput<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>;
 
+// Curve-specific From implementations for field types
+impl From<ark_pallas::Fq> for PallasInput {
+    fn from(value: ark_pallas::Fq) -> Self {
+        Self::BaseField(value)
+    }
+}
+
+impl From<ark_pallas::Fr> for PallasInput {
+    fn from(value: ark_pallas::Fr) -> Self {
+        Self::ScalarField(value)
+    }
+}
+
+impl From<ark_pallas::Affine> for PallasInput {
+    fn from(value: ark_pallas::Affine) -> Self {
+        Self::CurvePoint(value)
+    }
+}
+
+
+
 // Vesta curve hasher
 /// Vesta curve multi-field hasher with embedded parameters.
 /// Vesta forms a cycle with Pallas for efficient recursive proofs.
@@ -193,6 +208,25 @@ impl Default for VestaHasher {
 
 /// Type alias for Vesta curve field input enum.
 pub type VestaInput = FieldInput<ark_vesta::Fq, ark_vesta::Fr, ark_vesta::Affine>;
+
+// Curve-specific From implementations for field types
+impl From<ark_vesta::Fq> for VestaInput {
+    fn from(value: ark_vesta::Fq) -> Self {
+        Self::BaseField(value)
+    }
+}
+
+impl From<ark_vesta::Fr> for VestaInput {
+    fn from(value: ark_vesta::Fr) -> Self {
+        Self::ScalarField(value)
+    }
+}
+
+impl From<ark_vesta::Affine> for VestaInput {
+    fn from(value: ark_vesta::Affine) -> Self {
+        Self::CurvePoint(value)
+    }
+}
 
 // BN254 curve hasher
 /// BN254 curve multi-field hasher with embedded parameters.
@@ -235,6 +269,25 @@ impl Default for BN254Hasher {
 /// Type alias for BN254 curve field input enum.
 pub type BN254Input = FieldInput<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>;
 
+// Curve-specific From implementations for field types
+impl From<ark_bn254::Fq> for BN254Input {
+    fn from(value: ark_bn254::Fq) -> Self {
+        Self::BaseField(value)
+    }
+}
+
+impl From<ark_bn254::Fr> for BN254Input {
+    fn from(value: ark_bn254::Fr) -> Self {
+        Self::ScalarField(value)
+    }
+}
+
+impl From<ark_bn254::G1Affine> for BN254Input {
+    fn from(value: ark_bn254::G1Affine) -> Self {
+        Self::CurvePoint(value)
+    }
+}
+
 // BLS12-381 curve hasher
 /// BLS12-381 curve multi-field hasher with embedded parameters.
 /// BLS12-381 is used in Ethereum 2.0 and Zcash.
@@ -276,6 +329,25 @@ impl Default for BLS12_381Hasher {
 /// Type alias for BLS12-381 curve field input enum.
 pub type BLS12_381Input = FieldInput<ark_bls12_381::Fq, ark_bls12_381::Fr, ark_bls12_381::G1Affine>;
 
+// Curve-specific From implementations for field types
+impl From<ark_bls12_381::Fq> for BLS12_381Input {
+    fn from(value: ark_bls12_381::Fq) -> Self {
+        Self::BaseField(value)
+    }
+}
+
+impl From<ark_bls12_381::Fr> for BLS12_381Input {
+    fn from(value: ark_bls12_381::Fr) -> Self {
+        Self::ScalarField(value)
+    }
+}
+
+impl From<ark_bls12_381::G1Affine> for BLS12_381Input {
+    fn from(value: ark_bls12_381::G1Affine) -> Self {
+        Self::CurvePoint(value)
+    }
+}
+
 // BLS12-377 curve hasher
 /// BLS12-377 curve multi-field hasher with embedded parameters.
 /// BLS12-377 is used in Celo and forms cycles with BW6-761.
@@ -316,3 +388,22 @@ impl Default for BLS12_377Hasher {
 
 /// Type alias for BLS12-377 curve field input enum.
 pub type BLS12_377Input = FieldInput<ark_bls12_377::Fq, ark_bls12_377::Fr, ark_bls12_377::G1Affine>;
+
+// Curve-specific From implementations for field types
+impl From<ark_bls12_377::Fq> for BLS12_377Input {
+    fn from(value: ark_bls12_377::Fq) -> Self {
+        Self::BaseField(value)
+    }
+}
+
+impl From<ark_bls12_377::Fr> for BLS12_377Input {
+    fn from(value: ark_bls12_377::Fr) -> Self {
+        Self::ScalarField(value)
+    }
+}
+
+impl From<ark_bls12_377::G1Affine> for BLS12_377Input {
+    fn from(value: ark_bls12_377::G1Affine) -> Self {
+        Self::CurvePoint(value)
+    }
+}

@@ -41,7 +41,7 @@ fn test_input_size_limits() {
     
     let huge_string = "a".repeat(100_000_000);
     
-    match hasher.update_primitive(RustInput::from_string_slice(&huge_string)) {
+    match hasher.update(huge_string) {
         Err(_) => (),
         Ok(_) => panic!("Input size limit exceeded - should have been rejected"),
     }
@@ -55,7 +55,7 @@ fn test_large_byte_array_limits() {
     
     let huge_bytes = vec![0u8; 50_000_000];
     
-    match hasher.update_primitive(RustInput::from_bytes(&huge_bytes)) {
+    match hasher.update(huge_bytes) {
         Err(_) => (),
         Ok(_) => panic!("Byte array size limit exceeded - should have been rejected"),
     }
@@ -113,29 +113,68 @@ fn test_basic_timing_consistency() {
 /// Validates hash determinism to ensure no undefined behavior.
 #[test]
 fn test_hash_determinism_security() {
-    let test_data = [
-        RustInput::U64(0),
-        RustInput::U64(u64::MAX),
-        RustInput::I64(i64::MIN),
-        RustInput::I64(i64::MAX),
-        RustInput::from_bytes(&[]),
-        RustInput::from_bytes(&[0u8; 1000]),
-        RustInput::from_bytes(&[255u8; 1000]),
+    
+    // Test determinism for each type individually
+    let test_cases = [
+        (0u64, "u64_zero"),
+        (u64::MAX, "u64_max"),
     ];
     
-    for (i, data) in test_data.iter().enumerate() {
+    let i64_test_cases = [
+        (i64::MIN, "i64_min"),
+        (i64::MAX, "i64_max"),
+    ];
+    
+    for (data, name) in test_cases {
         let mut hashes = Vec::new();
         
         for _ in 0..10 {
             let mut hasher = PallasHasher::new();
-            hasher.update_primitive(data.clone()).unwrap();
+            hasher.update(data).unwrap();
             let hash = hasher.digest().unwrap();
             hashes.push(hash.to_string());
         }
         
         let unique_hashes: HashSet<_> = hashes.iter().collect();
         assert_eq!(unique_hashes.len(), 1, 
-                  "Non-deterministic behavior detected for test case {}: {:?}", i, unique_hashes);
+                  "Non-deterministic behavior detected for {}: {:?}", name, unique_hashes);
+    }
+    
+    for (data, name) in i64_test_cases {
+        let mut hashes = Vec::new();
+        
+        for _ in 0..10 {
+            let mut hasher = PallasHasher::new();
+            hasher.update(data).unwrap();
+            let hash = hasher.digest().unwrap();
+            hashes.push(hash.to_string());
+        }
+        
+        let unique_hashes: HashSet<_> = hashes.iter().collect();
+        assert_eq!(unique_hashes.len(), 1, 
+                  "Non-deterministic behavior detected for {}: {:?}", name, unique_hashes);
+    }
+    
+    // Test byte arrays separately
+    let byte_test_cases = [
+        (Vec::<u8>::new(), "empty_bytes"),
+        (vec![0u8; 1000], "zero_bytes"),
+        (vec![255u8; 1000], "max_bytes"),
+    ];
+    
+    for (data, name) in byte_test_cases {
+        let mut hashes = Vec::new();
+        
+        for _ in 0..10 {
+            let mut hasher = PallasHasher::new();
+            hasher.update(data.clone()).unwrap();
+            let hash = hasher.digest().unwrap();
+            hashes.push(hash.to_string());
+        }
+        
+        let unique_hashes: HashSet<_> = hashes.iter().collect();
+        assert_eq!(unique_hashes.len(), 1, 
+                  "Non-deterministic behavior detected for {}: {:?}", name, unique_hashes);
     }
 }
 
@@ -144,13 +183,13 @@ fn test_hash_determinism_security() {
 fn test_error_information_leakage() {
     let mut hasher = PallasHasher::new();
     
-    let test_cases = vec![
-        RustInput::String("\x00\x01\x02\x03invalid_utf8".to_string()),
-        RustInput::from_bytes(&[0u8; 0]),
+    let test_cases: Vec<Vec<u8>> = vec![
+        vec![0, 1, 2, 3], // Some bytes that might be interpreted as invalid UTF-8
+        vec![0u8; 0],     // Empty bytes
     ];
     
     for test_case in test_cases {
-        let result = hasher.update_primitive(test_case);
+        let result = hasher.update(test_case);
         
         if let Err(error) = result {
             let error_msg = format!("{}", error);
@@ -169,11 +208,11 @@ fn test_error_information_leakage() {
 fn test_error_cleanup() {
     let mut hasher = PallasHasher::new();
     
-    hasher.update_primitive(RustInput::U64(42)).unwrap();
+    hasher.update(42u64).unwrap();
     
-    let _result = hasher.update_primitive(RustInput::from_bytes(&vec![0u8; 1000000]));
+    let _result = hasher.update(vec![0u8; 1000000]);
     
-    let cleanup_result = hasher.update_primitive(RustInput::U64(100));
+    let cleanup_result = hasher.update(100u64);
     assert!(cleanup_result.is_ok(), "Hasher not properly cleaned up after error");
     
     let hash = hasher.digest();
@@ -206,11 +245,11 @@ fn test_parameter_isolation_security() {
     let mut pallas_hasher2 = PallasHasher::new();
     let mut bn254_hasher = BN254Hasher::new();
     
-    let test_data = RustInput::U64(12345);
+    let test_data = 12345u64;
     
-    pallas_hasher1.update_primitive(test_data.clone()).unwrap();
-    pallas_hasher2.update_primitive(test_data.clone()).unwrap();
-    bn254_hasher.update_primitive(test_data).unwrap();
+    pallas_hasher1.update(test_data).unwrap();
+    pallas_hasher2.update(test_data).unwrap();
+    bn254_hasher.update(test_data).unwrap();
     
     let pallas_hash1 = pallas_hasher1.digest().unwrap();
     let pallas_hash2 = pallas_hasher2.digest().unwrap();
@@ -229,7 +268,7 @@ fn test_stack_overflow_protection() {
     let mut hasher = PallasHasher::new();
     
     for i in 0..10000 {
-        let result = hasher.update_primitive(RustInput::U8((i % 256) as u8));
+        let result = hasher.update((i % 256) as u8);
         assert!(result.is_ok(), "Stack overflow or recursion limit hit at iteration {}", i);
     }
     

@@ -72,7 +72,17 @@ pub enum FieldInput<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> 
     ScalarField(S), 
     /// Curve point in affine representation - coordinates extracted as base field elements
     CurvePoint(G),
+    /// Primitive Rust type that needs packing
+    Primitive(RustInput),
 }
+
+// Single blanket implementation for all primitive types!
+impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<RustInput>> From<T> for FieldInput<F, S, G> {
+    fn from(value: T) -> Self {
+        Self::Primitive(value.into())
+    }
+}
+
 
 /// Advanced multi-field Poseidon hasher with sophisticated field conversion capabilities.
 ///
@@ -257,6 +267,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
             }
             FieldInput::ScalarField(fr) => self.update_scalar_field(fr),
             FieldInput::CurvePoint(point) => self.update_curve_point(point),
+            FieldInput::Primitive(rust_input) => self.update_primitive(rust_input),
         }
     }
 
@@ -268,7 +279,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// # Arguments
     ///
     /// * `input` - The primitive value to add
-    pub fn update_primitive(&mut self, input: RustInput) -> HasherResult<()> {
+    fn update_primitive(&mut self, input: RustInput) -> HasherResult<()> {
         // Serialize the input into the primitive buffer
         serialize_rust_input(&input, &mut self.primitive_buffer)?;
         
@@ -352,8 +363,8 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// # fn main() -> Result<(), HasherError> {
     /// let mut hasher = PallasHasher::new();
     /// 
-    /// hasher.update_primitive(RustInput::U64(42))?;
-    /// hasher.update_primitive(RustInput::U64(100))?;
+    /// hasher.update(42u64)?;
+    /// hasher.update(100u64)?;
     /// 
     /// let final_hash = hasher.finalize()?;  // hasher is consumed here
     /// // hasher can no longer be used
@@ -391,11 +402,81 @@ mod tests {
         let a = ark_pallas::Fq::from(1u64);
         let b = ark_pallas::Fq::from(2u64);
         
+        // Old way still works
         hasher.update(PallasInput::BaseField(a)).expect("Failed to update hasher");
         hasher.update(PallasInput::BaseField(b)).expect("Failed to update hasher");
         
         let hash = hasher.digest().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
+    }
+    
+    #[test]
+    fn test_from_implementations() {
+        let mut hasher = PallasHasher::new();
+        
+        // New way - much cleaner!
+        hasher.update(ark_pallas::Fq::from(1u64)).expect("Failed to update Fq");
+        hasher.update(ark_pallas::Fr::from(2u64)).expect("Failed to update Fr");
+        hasher.update(ark_pallas::Affine::generator()).expect("Failed to update point");
+        
+        let hash = hasher.digest().expect("Failed to compute hash");
+        assert_ne!(hash, ark_pallas::Fq::zero());
+    }
+    
+    #[test]
+    fn test_unified_update_api() {
+        let mut hasher = PallasHasher::new();
+        
+        // Everything through a single update method - this is the dream API!
+        hasher.update(ark_pallas::Fq::from(1u64)).expect("Failed to update Fq");
+        hasher.update(ark_pallas::Fr::from(2u64)).expect("Failed to update Fr");
+        hasher.update(ark_pallas::Affine::generator()).expect("Failed to update point");
+        hasher.update(true).expect("Failed to update bool");
+        hasher.update(42u64).expect("Failed to update u64");
+        hasher.update("hello").expect("Failed to update string");
+        hasher.update(vec![1u8, 2, 3]).expect("Failed to update bytes");
+        
+        let hash = hasher.digest().expect("Failed to compute hash");
+        assert_ne!(hash, ark_pallas::Fq::zero());
+    }
+    
+    #[test]
+    fn test_api_comparison() {
+        // Manual enum construction (still works)
+        let mut explicit_style = PallasHasher::new();
+        explicit_style.update(PallasInput::ScalarField(ark_pallas::Fr::from(42u64))).unwrap();
+        explicit_style.update(PallasInput::Primitive(RustInput::Bool(true))).unwrap();
+        explicit_style.update(PallasInput::Primitive(RustInput::from_string_slice("test"))).unwrap();
+        
+        // Clean unified API (recommended)
+        let mut unified_style = PallasHasher::new();
+        unified_style.update(ark_pallas::Fr::from(42u64)).unwrap();  // Direct!
+        unified_style.update(true).unwrap();                         // Natural!  
+        unified_style.update("test").unwrap();                       // Intuitive!
+        
+        // Both produce the same result
+        assert_eq!(explicit_style.digest().unwrap(), unified_style.digest().unwrap());
+    }
+    
+    #[test]
+    fn test_generic_from_implementations() {
+        // Test that generic From implementations work for all curves!
+        let mut pallas = crate::types::PallasHasher::new();
+        let mut bn254 = crate::types::BN254Hasher::new();
+        
+        // Same API works for all curves thanks to generic implementations
+        pallas.update(42u64).expect("Pallas u64");
+        pallas.update(true).expect("Pallas bool");
+        pallas.update("hello").expect("Pallas string");
+        
+        bn254.update(42u64).expect("BN254 u64");
+        bn254.update(true).expect("BN254 bool");
+        bn254.update("hello").expect("BN254 string");
+        
+        // Different curves produce different hashes for same input
+        let pallas_hash = pallas.digest().expect("Pallas digest");
+        let bn254_hash = bn254.digest().expect("BN254 digest");
+        assert_ne!(pallas_hash.to_string(), bn254_hash.to_string());
     }
 
     #[test]

@@ -60,7 +60,7 @@ fn test_timing_consistency_input_sizes() {
             let mut hasher = PallasHasher::new();
             
             let start = Instant::now();
-            hasher.update_primitive(RustInput::from_bytes(&test_data)).unwrap();
+            hasher.update(test_data.clone()).unwrap();
             let _hash = hasher.digest().unwrap();
             let elapsed = start.elapsed();
             
@@ -96,7 +96,7 @@ fn test_timing_consistency_data_patterns() {
             let mut hasher = PallasHasher::new();
             
             let start = Instant::now();
-            hasher.update_primitive(RustInput::from_bytes(pattern_data)).unwrap();
+            hasher.update(pattern_data.clone()).unwrap();
             let _hash = hasher.digest().unwrap();
             let elapsed = start.elapsed();
             
@@ -151,7 +151,7 @@ fn test_field_conversion_timing() {
 #[test]
 #[ignore = "Strict timing test - run with --ignored flag"]
 fn test_cross_curve_timing_consistency() {
-    let test_data = RustInput::from_bytes(&vec![0x42u8; 1000]);
+    let test_data = vec![0x42u8; 1000];
     let mut all_timings = Vec::new();
     const NUM_ROUNDS: usize = 50;
     
@@ -159,7 +159,7 @@ fn test_cross_curve_timing_consistency() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
-        hasher.update_primitive(test_data.clone()).unwrap();
+        hasher.update(test_data.clone()).unwrap();
         let _hash = hasher.digest().unwrap();
         pallas_timings.push(start.elapsed());
     }
@@ -169,7 +169,7 @@ fn test_cross_curve_timing_consistency() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = BN254Hasher::new();
         let start = Instant::now();
-        hasher.update_primitive(test_data.clone()).unwrap();
+        hasher.update(test_data.clone()).unwrap();
         let _hash = hasher.digest().unwrap();
         bn254_timings.push(start.elapsed());
     }
@@ -179,7 +179,7 @@ fn test_cross_curve_timing_consistency() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = BLS12_381Hasher::new();
         let start = Instant::now();
-        hasher.update_primitive(test_data.clone()).unwrap();
+        hasher.update(test_data.clone()).unwrap();
         let _hash = hasher.digest().unwrap();
         bls381_timings.push(start.elapsed());
     }
@@ -202,7 +202,7 @@ fn test_cache_timing_effects() {
         let mut hasher = PallasHasher::new();
         
         let start = Instant::now();
-        hasher.update_primitive(RustInput::from_bytes(&test_data)).unwrap();
+        hasher.update(test_data.clone()).unwrap();
         let _hash = hasher.digest().unwrap();
         let elapsed = start.elapsed();
         
@@ -242,7 +242,7 @@ fn test_branch_prediction_effects() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
-        hasher.update_primitive(RustInput::from_bytes(&predictable_data)).unwrap();
+        hasher.update(predictable_data.clone()).unwrap();
         let _hash = hasher.digest().unwrap();
         predictable_timings.push(start.elapsed());
     }
@@ -250,7 +250,7 @@ fn test_branch_prediction_effects() {
     for _ in 0..NUM_ROUNDS {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
-        hasher.update_primitive(RustInput::from_bytes(&unpredictable_data)).unwrap();
+        hasher.update(unpredictable_data.clone()).unwrap();
         let _hash = hasher.digest().unwrap();
         unpredictable_timings.push(start.elapsed());
     }
@@ -286,7 +286,7 @@ fn test_memory_access_patterns() {
             let mut hasher = PallasHasher::new();
             
             let start = Instant::now();
-            hasher.update_primitive(RustInput::from_bytes(test_data)).unwrap();
+            hasher.update(test_data.clone()).unwrap();
             let _hash = hasher.digest().unwrap();
             let elapsed = start.elapsed();
             
