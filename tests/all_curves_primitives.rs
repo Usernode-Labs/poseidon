@@ -8,7 +8,7 @@ fn test_pallas_primitives() {
     let mut hasher = PallasHasher::new();
     hasher.update_primitive(RustInput::Bool(true)).expect("Failed to update");
     hasher.update_primitive(RustInput::U64(12345)).expect("Failed to update");
-    let hash = hasher.squeeze().expect("Failed to squeeze");
+    let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_pallas::Fq::zero());
 }
 
@@ -17,7 +17,7 @@ fn test_vesta_primitives() {
     let mut hasher = VestaHasher::new();
     hasher.update_primitive(RustInput::Bool(false)).expect("Failed to update");
     hasher.update_primitive(RustInput::U64(67890)).expect("Failed to update");
-    let hash = hasher.squeeze().expect("Failed to squeeze");
+    let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_vesta::Fq::zero());
 }
 
@@ -26,7 +26,7 @@ fn test_bn254_primitives() {
     let mut hasher = BN254Hasher::new();
     hasher.update_primitive(RustInput::I32(-123)).expect("Failed to update");
     hasher.update_primitive(RustInput::from_string_slice("bn254")).expect("Failed to update");
-    let hash = hasher.squeeze().expect("Failed to squeeze");
+    let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_bn254::Fq::zero());
 }
 
@@ -35,7 +35,7 @@ fn test_bls12_381_primitives() {
     let mut hasher = BLS12_381Hasher::new();
     hasher.update_primitive(RustInput::U128(999999999999u128)).expect("Failed to update");
     hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4])).expect("Failed to update");
-    let hash = hasher.squeeze().expect("Failed to squeeze");
+    let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_bls12_381::Fq::zero());
 }
 
@@ -44,7 +44,7 @@ fn test_bls12_377_primitives() {
     let mut hasher = BLS12_377Hasher::new();
     hasher.update_primitive(RustInput::I64(-987654321)).expect("Failed to update");
     hasher.update_primitive(RustInput::String("bls12_377".to_string())).expect("Failed to update");
-    let hash = hasher.squeeze().expect("Failed to squeeze");
+    let hash = hasher.digest().expect("Failed to digest");
     assert_ne!(hash, ark_bls12_377::Fq::zero());
 }
 
@@ -71,11 +71,11 @@ fn test_all_curves_with_config() {
     bls12_377.update_primitive(RustInput::from_bytes(test_bytes)).expect("BLS12-377 failed");
     
     // All should produce non-zero hashes
-    assert_ne!(pallas.squeeze().expect("Pallas squeeze failed"), ark_pallas::Fq::zero());
-    assert_ne!(vesta.squeeze().expect("Vesta squeeze failed"), ark_vesta::Fq::zero());
-    assert_ne!(bn254.squeeze().expect("BN254 squeeze failed"), ark_bn254::Fq::zero());
-    assert_ne!(bls12_381.squeeze().expect("BLS12-381 squeeze failed"), ark_bls12_381::Fq::zero());
-    assert_ne!(bls12_377.squeeze().expect("BLS12-377 squeeze failed"), ark_bls12_377::Fq::zero());
+    assert_ne!(pallas.digest().expect("Pallas digest failed"), ark_pallas::Fq::zero());
+    assert_ne!(vesta.digest().expect("Vesta digest failed"), ark_vesta::Fq::zero());
+    assert_ne!(bn254.digest().expect("BN254 digest failed"), ark_bn254::Fq::zero());
+    assert_ne!(bls12_381.digest().expect("BLS12-381 digest failed"), ark_bls12_381::Fq::zero());
+    assert_ne!(bls12_377.digest().expect("BLS12-377 digest failed"), ark_bls12_377::Fq::zero());
 }
 
 #[test]
@@ -91,9 +91,9 @@ fn test_cross_curve_different_hashes() {
     vesta.update_primitive(input.clone()).expect("Vesta failed");
     bn254.update_primitive(input).expect("BN254 failed");
     
-    let pallas_hash = pallas.squeeze().expect("Pallas squeeze failed");
-    let vesta_hash = vesta.squeeze().expect("Vesta squeeze failed");
-    let bn254_hash = bn254.squeeze().expect("BN254 squeeze failed");
+    let pallas_hash = pallas.digest().expect("Pallas digest failed");
+    let vesta_hash = vesta.digest().expect("Vesta digest failed");
+    let bn254_hash = bn254.digest().expect("BN254 digest failed");
     
     // Convert to string for comparison (different field types)
     let pallas_str = pallas_hash.to_string();

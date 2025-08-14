@@ -10,7 +10,7 @@ fn main() {
     // Normal operation
     println!("✅ Normal operation:");
     hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).unwrap();
-    let hash = hasher.squeeze().unwrap();
+    let hash = hasher.digest().unwrap();
     println!("  Hash: {}\n", hash.to_string().chars().take(40).collect::<String>() + "...");
     
     // Demonstrate error types
@@ -20,7 +20,7 @@ fn main() {
     println!("  instead of generic 'hashing failed' messages.\n");
     
     // Show error structure
-    match hasher.squeeze() {
+    match hasher.digest() {
         Ok(result) => println!("  Empty state hash: {result}"),
         Err(HasherError::PoseidonError(poseidon_err)) => {
             println!("  Cascaded Poseidon error: {poseidon_err}");

@@ -10,14 +10,14 @@ fn main() -> Result<(), HasherError> {
     hasher.update(PallasInput::ScalarField(ark_pallas::Fr::from(42u64)))?;
     hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(100u64)))?;
     
-    let hash = hasher.squeeze()?;
+    let hash = hasher.digest()?;
     println!("Hash: {}", hash);
     
     // Hash primitive types
     hasher.update_primitive(RustInput::U64(123))?;
     hasher.update_primitive(RustInput::from_string_slice("hello"))?;
     
-    let hash2 = hasher.squeeze()?;
+    let hash2 = hasher.digest()?;
     println!("Primitive hash: {}", hash2);
     
     Ok(())

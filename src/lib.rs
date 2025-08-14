@@ -33,7 +33,7 @@ hasher.update(PallasInput::ScalarField(scalar))?;
 hasher.update(PallasInput::BaseField(base))?;
 hasher.update(PallasInput::CurvePoint(point))?;
 
-let hash = hasher.squeeze()?;
+let hash = hasher.digest()?;
 println!("Hash: {}", hash);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -46,7 +46,7 @@ use poseidon_hash::prelude::*;
 let mut hasher = PallasHasher::new();
 hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)))?;
 
-match hasher.squeeze() {
+match hasher.digest() {
     Ok(hash) => println!("Success: {}", hash),
     Err(HasherError::PoseidonError(poseidon_err)) => {
         eprintln!("Detailed Poseidon error: {}", poseidon_err);

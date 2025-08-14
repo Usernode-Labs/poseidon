@@ -61,7 +61,7 @@ fn test_processing_time_bounds() {
     let result = hasher.update_primitive(RustInput::from_bytes(&large_input));
     assert!(result.is_ok(), "Failed to process large but reasonable input");
     
-    let _hash = hasher.squeeze().unwrap();
+    let _hash = hasher.digest().unwrap();
     let elapsed = start_time.elapsed();
     
     assert!(elapsed < Duration::from_secs(10), 
@@ -83,7 +83,7 @@ fn test_memory_usage_bounds() {
         let result = hasher.update_primitive(RustInput::from_bytes(&test_data));
         assert!(result.is_ok(), "Failed to process data of size {}", size);
         
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
     }
     
     assert!(max_memory_estimate < 100_000_000, 
@@ -103,7 +103,7 @@ fn test_repeated_large_input_protection() {
         let result = hasher.update_primitive(RustInput::from_bytes(&input));
         assert!(result.is_ok(), "Failed at iteration {}", i);
         
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         
         let elapsed = start_time.elapsed();
         if elapsed > Duration::from_secs(30) {
@@ -125,7 +125,7 @@ fn test_input_edge_case_validation() {
     assert!(hasher.update_primitive(RustInput::I64(i64::MAX)).is_ok());
     assert!(hasher.update_primitive(RustInput::I64(i64::MIN)).is_ok());
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Failed to complete hash with edge case inputs");
 }
 
@@ -143,7 +143,7 @@ fn test_invalid_utf8_handling() {
     let result = hasher.update_primitive(RustInput::from_bytes(&invalid_utf8));
     assert!(result.is_ok(), "Byte arrays with invalid UTF-8 should be accepted");
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Should complete hash with invalid UTF-8 bytes");
 }
 
@@ -169,7 +169,7 @@ fn test_concurrent_input_validation() {
             let result = hasher.update_primitive(RustInput::from_bytes(&input_data));
             
             if result.is_ok() {
-                let hash = hasher.squeeze();
+                let hash = hasher.digest();
                 let success = hash.is_ok();
                 
                 let mut results_guard = results_clone.lock().unwrap();
@@ -205,7 +205,7 @@ fn test_state_consistency_after_validation_errors() {
     let result = hasher.update_primitive(RustInput::U64(67890));
     assert!(result.is_ok(), "Hasher state inconsistent after validation error");
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Cannot complete hash - hasher state corrupted");
 }
 
@@ -220,7 +220,7 @@ fn test_validation_performance_consistency() {
         
         let start = Instant::now();
         let result = hasher.update_primitive(RustInput::from_bytes(&test_data));
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         let elapsed = start.elapsed();
         
         assert!(result.is_ok(), "Validation failed in round {}", round);

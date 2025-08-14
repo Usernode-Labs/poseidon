@@ -17,20 +17,20 @@ fn test_zeroization_implementation() {
     hasher.update_primitive(RustInput::from_string_slice("sensitive_data")).unwrap();
     hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4, 5])).unwrap();
     
-    let hash1 = hasher.squeeze().unwrap();
+    let hash1 = hasher.digest().unwrap();
     
     hasher.update(PallasInput::ScalarField(ark_pallas::Fr::from(999u64))).unwrap();
-    let hash2 = hasher.squeeze().unwrap();
+    let hash2 = hasher.digest().unwrap();
     
     assert_ne!(hash1, hash2);
     
     hasher.update(PallasInput::ScalarField(test_scalar)).unwrap();
     hasher.reset();
     
-    assert_eq!(hasher.absorbed_count(), 0);
+    assert_eq!(hasher.element_count(), 0);
     
     hasher.update_primitive(RustInput::Bool(true)).unwrap();
-    let _hash3 = hasher.squeeze().unwrap();
+    let _hash3 = hasher.digest().unwrap();
 }
 
 /// Tests that hasher memory is cleared after drop.
@@ -50,7 +50,7 @@ fn test_hasher_memory_cleared_after_drop() {
             ptr::copy_nonoverlapping(hasher_ptr, memory_snapshot.as_mut_ptr(), 1024);
         }
         
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
     }
     
     let sensitive_pattern = 0xDEADBEEFCAFEBABEu64.to_le_bytes();
@@ -78,7 +78,7 @@ fn test_concurrent_zeroization() {
         let sensitive_data = ark_pallas::Fr::from(0xFEEDFACECAFEBABEu64);
         hasher.update(PallasInput::ScalarField(sensitive_data)).unwrap();
         
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         
         drop(hasher);
         

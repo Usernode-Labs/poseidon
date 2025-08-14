@@ -27,7 +27,7 @@ fn test_random_byte_fuzzing() {
         
         match result {
             Ok(_) => {
-                let hash_result = hasher.squeeze();
+                let hash_result = hasher.digest();
                 assert!(hash_result.is_ok(), "Hash failed after random input at round {}", round);
             },
             Err(e) => {
@@ -64,7 +64,7 @@ fn test_random_string_fuzzing() {
         let result = hasher.update_primitive(RustInput::String(random_string.clone()));
         
         if result.is_ok() {
-            let hash_result = hasher.squeeze();
+            let hash_result = hasher.digest();
             assert!(hash_result.is_ok(), "Hash failed after random string at round {}", round);
         }
     }
@@ -91,7 +91,7 @@ fn test_integer_boundary_fuzzing() {
         assert!(result.is_ok(), "Boundary value {} failed: {:?}", i, boundary_value);
     }
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Failed to complete hash with boundary values");
 }
 
@@ -116,7 +116,7 @@ fn test_field_element_patterns() {
         assert!(result.is_ok(), "Field element test {} failed", i);
     }
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Failed to complete hash with field elements");
 }
 
@@ -140,7 +140,7 @@ fn test_curve_point_fuzzing() {
         assert!(result.is_ok(), "Curve point test {} failed", i);
     }
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Failed to complete hash with curve points");
 }
 
@@ -193,7 +193,7 @@ fn test_mixed_input_fuzzing() {
             }
         }
         
-        let _ = hasher.squeeze();
+        let _ = hasher.digest();
     }
 }
 
@@ -215,7 +215,7 @@ fn test_byte_pattern_fuzzing() {
         let _ = hasher.update_primitive(RustInput::from_bytes(pattern));
     }
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Failed to complete hash after pattern fuzzing");
 }
 
@@ -249,7 +249,7 @@ fn test_large_input_fuzzing() {
         }
     }
     
-    let _ = hasher.squeeze();
+    let _ = hasher.digest();
 }
 
 /// Tests rapid successive inputs for state consistency.
@@ -272,7 +272,7 @@ fn test_rapid_input_fuzzing() {
             }
         }
         
-        let hash = hasher.squeeze();
+        let hash = hasher.digest();
         assert!(hash.is_ok(), "Round {}: Failed to complete rapid input hash", round);
     }
 }

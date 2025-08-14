@@ -22,12 +22,14 @@
 //! use poseidon_hash::hasher::{MultiFieldHasher, FieldInput, HasherResult};
 //! use poseidon_hash::parameters::pallas::PALLAS_PARAMS;
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> = 
 //!     MultiFieldHasher::new_from_ref(&*PALLAS_PARAMS);
 //!     
-//! hasher.absorb(FieldInput::ScalarField(ark_pallas::Fr::from(42u64)))?;
-//! let hash = hasher.squeeze()?;
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! hasher.update(FieldInput::ScalarField(ark_pallas::Fr::from(42u64)))?;
+//! let hash = hasher.digest()?;
+//! # Ok(())
+//! # }
 //! ```
 
 use ark_ff::{PrimeField, BigInteger, Zero};
@@ -64,7 +66,7 @@ pub type HasherResult<T> = Result<T, HasherError>;
 /// within the same elliptic curve ecosystem.
 #[derive(Debug, Clone)]
 pub enum FieldInput<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> {
-    /// Base field element (Fq) - absorbed directly without conversion
+    /// Base field element (Fq) - added directly without conversion
     BaseField(F),
     /// Scalar field element (Fr) - converted to base field representation
     ScalarField(S), 
@@ -173,7 +175,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     }
 
     /// Absorbs a base field element (Fq) directly into the hasher state.
-    pub fn absorb_base_field(&mut self, element: F) {
+    pub fn update_base_field(&mut self, element: F) {
         self.state.push(element);
     }
 
@@ -183,7 +185,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// * Same bit size: Simple byte representation conversion
     /// * Fr < Fq: Direct conversion without data loss
     /// * Fr > Fq: Automatic chunking into multiple Fq elements
-    pub fn absorb_scalar_field(&mut self, element: S) -> HasherResult<()> {
+    pub fn update_scalar_field(&mut self, element: S) -> HasherResult<()> {
         let fr_bits = S::MODULUS_BIT_SIZE;
         let fq_bits = F::MODULUS_BIT_SIZE;
         
@@ -232,13 +234,13 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     }
 
     /// Absorbs a curve point by extracting and hashing its affine coordinates.
-    pub fn absorb_curve_point(&mut self, point: G) -> HasherResult<()> {
+    pub fn update_curve_point(&mut self, point: G) -> HasherResult<()> {
         if point.is_zero() {
-            // Point at infinity -> absorb (0, 0)
+            // Point at infinity -> add (0, 0)
             self.state.push(F::zero());
             self.state.push(F::zero());
         } else {
-            // Regular point -> absorb (x, y) coordinates
+            // Regular point -> add (x, y) coordinates
             let (x, y) = point.xy().ok_or(HasherError::PointConversionFailed)?;
             self.state.push(x);
             self.state.push(y);
@@ -247,14 +249,14 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     }
 
     /// Absorbs any field input type using the appropriate specialized method.
-    pub fn absorb(&mut self, input: FieldInput<F, S, G>) -> HasherResult<()> {
+    pub fn update(&mut self, input: FieldInput<F, S, G>) -> HasherResult<()> {
         match input {
             FieldInput::BaseField(fq) => {
-                self.absorb_base_field(fq);
+                self.update_base_field(fq);
                 Ok(())
             }
-            FieldInput::ScalarField(fr) => self.absorb_scalar_field(fr),
-            FieldInput::CurvePoint(point) => self.absorb_curve_point(point),
+            FieldInput::ScalarField(fr) => self.update_scalar_field(fr),
+            FieldInput::CurvePoint(point) => self.update_curve_point(point),
         }
     }
 
@@ -265,12 +267,12 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     ///
     /// # Arguments
     ///
-    /// * `input` - The primitive value to absorb
-    pub fn absorb_primitive(&mut self, input: RustInput) -> HasherResult<()> {
+    /// * `input` - The primitive value to add
+    pub fn update_primitive(&mut self, input: RustInput) -> HasherResult<()> {
         // Serialize the input into the primitive buffer
         serialize_rust_input(&input, &mut self.primitive_buffer)?;
         
-        // Extract any complete field elements and absorb them
+        // Extract any complete field elements and add them
         let field_elements = self.primitive_buffer.extract_field_elements::<F>()?;
         for element in field_elements {
             self.state.push(element);
@@ -290,7 +292,11 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// * Subsequent: H₂ = hash(H₁, C), H₃ = hash(H₂, D), ...
     ///
     /// This ensures that every element influences the final hash result.
-    pub fn squeeze(&mut self) -> HasherResult<F> {
+    /// 
+    /// The hasher state is preserved, allowing you to continue adding data
+    /// and compute different hashes. Use `finalize()` when you want to consume
+    /// the hasher and ensure it cannot be reused.
+    pub fn digest(&mut self) -> HasherResult<F> {
         // First, flush any remaining primitive data from the buffer
         let remaining_field_elements = self.primitive_buffer.flush_remaining::<F>()?;
         for element in remaining_field_elements {
@@ -302,30 +308,60 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
             return Ok(F::zero());
         }
         
-        // Pad state to even length if needed
-        if self.state.len() % 2 != 0 {
-            self.state.push(F::zero());
-        }
-
-        // Proper chaining: incorporate all elements sequentially
-        if self.state.len() == 2 {
-            // Simple case: just hash the two elements
-            let result = self.poseidon.hash(&[self.state[0], self.state[1]])?;
-            self.state.zeroize();
-            return Ok(result);
-        }
-        
-        // Multi-element case: chain them properly
-        let mut result = self.poseidon.hash(&[self.state[0], self.state[1]])?;
-        
-        // Process remaining elements one by one
-        for i in 2..self.state.len() {
-            result = self.poseidon.hash(&[result, self.state[i]])?;
-        }
-
-        // Securely clear state for next use
-        self.state.zeroize();
+        // Compute hash directly from state without copying
+        let result = if self.state.len() == 1 {
+            // Single element: pad with zero and hash
+            self.poseidon.hash(&[self.state[0], F::zero()])?
+        } else if self.state.len() == 2 {
+            // Two elements: hash directly
+            self.poseidon.hash(&[self.state[0], self.state[1]])?
+        } else {
+            // Multi-element case: chain them properly
+            let mut hash_result = self.poseidon.hash(&[self.state[0], self.state[1]])?;
+            
+            // Process remaining elements one by one
+            for element in self.state.iter().skip(2) {
+                hash_result = self.poseidon.hash(&[hash_result, *element])?;
+            }
+            
+            // Handle odd length by adding final zero if needed
+            if self.state.len() % 2 != 0 {
+                hash_result = self.poseidon.hash(&[hash_result, F::zero()])?;
+            }
+            
+            hash_result
+        };
         Ok(result)
+    }
+
+
+    /// Consume the hasher and return the final hash result.
+    /// 
+    /// This is equivalent to `digest()` but takes ownership of the hasher,
+    /// ensuring it cannot be used again and triggering automatic cleanup via `ZeroizeOnDrop`.
+    /// Useful when you want to guarantee the hasher is consumed after getting the final result.
+    /// 
+    /// # Returns
+    /// 
+    /// The final hash of all added elements.
+    /// 
+    /// # Example
+    /// 
+    /// ```rust
+    /// # use poseidon_hash::prelude::*;
+    /// # fn main() -> Result<(), HasherError> {
+    /// let mut hasher = PallasHasher::new();
+    /// 
+    /// hasher.update_primitive(RustInput::U64(42))?;
+    /// hasher.update_primitive(RustInput::U64(100))?;
+    /// 
+    /// let final_hash = hasher.finalize()?;  // hasher is consumed here
+    /// // hasher can no longer be used
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn finalize(mut self) -> HasherResult<F> {
+        self.digest()
     }
 
     /// Resets the hasher state without changing parameters.
@@ -336,8 +372,8 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
         self.primitive_buffer.clear(); // Now uses secure zeroization internally
     }
 
-    /// Returns the current number of absorbed elements.
-    pub fn absorbed_count(&self) -> usize {
+    /// Returns the current number of elements added.
+    pub fn element_count(&self) -> usize {
         self.state.len()
     }
 }
@@ -358,7 +394,7 @@ mod tests {
         hasher.update(PallasInput::BaseField(a)).expect("Failed to update hasher");
         hasher.update(PallasInput::BaseField(b)).expect("Failed to update hasher");
         
-        let hash = hasher.squeeze().expect("Failed to compute hash");
+        let hash = hasher.digest().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
 
@@ -377,14 +413,14 @@ mod tests {
         hasher.update(PallasInput::ScalarField(c)).expect("Failed to update hasher");
         hasher.update(PallasInput::ScalarField(d)).expect("Failed to update hasher");
         
-        let hash_abcd = hasher.squeeze().expect("Failed to compute hash");
+        let hash_abcd = hasher.digest().expect("Failed to compute hash");
         
         // Hash just the last two elements
         let mut hasher2 = PallasHasher::new();
         hasher2.update(PallasInput::ScalarField(c)).expect("Failed to update hasher");
         hasher2.update(PallasInput::ScalarField(d)).expect("Failed to update hasher");
         
-        let hash_cd = hasher2.squeeze().expect("Failed to compute hash");
+        let hash_cd = hasher2.digest().expect("Failed to compute hash");
         
         // These should be different due to proper chaining
         assert_ne!(hash_abcd, hash_cd);
@@ -402,7 +438,7 @@ mod tests {
         hasher.update(PallasInput::BaseField(base)).expect("Failed to update hasher");
         hasher.update(PallasInput::CurvePoint(generator)).expect("Failed to update hasher");
         
-        let hash = hasher.squeeze().expect("Failed to compute hash");
+        let hash = hasher.digest().expect("Failed to compute hash");
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
 
@@ -418,8 +454,8 @@ mod tests {
         pallas_hasher.update(PallasInput::ScalarField(pallas_scalar)).expect("Failed to update hasher");
         bn254_hasher.update(BN254Input::ScalarField(bn254_scalar)).expect("Failed to update hasher");
         
-        let pallas_hash = pallas_hasher.squeeze().expect("Failed to compute hash");
-        let bn254_hash = bn254_hasher.squeeze().expect("Failed to compute hash");
+        let pallas_hash = pallas_hasher.digest().expect("Failed to compute hash");
+        let bn254_hash = bn254_hasher.digest().expect("Failed to compute hash");
         
         // These should be different because they use different parameters
         assert_ne!(pallas_hash.to_string(), bn254_hash.to_string());
@@ -431,7 +467,7 @@ mod tests {
         let mut hasher: PallasHasher = Default::default();
         
         hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).expect("Failed to update hasher");
-        let hash = hasher.squeeze().expect("Failed to compute hash");
+        let hash = hasher.digest().expect("Failed to compute hash");
         
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
@@ -442,12 +478,13 @@ mod tests {
         
         // First hash
         hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64))).expect("Failed to update hasher");
-        let hash1 = hasher.squeeze().expect("Failed to compute hash");
+        let hash1 = hasher.digest().expect("Failed to compute hash");
         
-        // Second hash (hasher should reset automatically)
+        // Second hash (now includes both elements since digest preserves state)
         hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64))).expect("Failed to update hasher");
-        let hash2 = hasher.squeeze().expect("Failed to compute hash");
+        let hash2 = hasher.digest().expect("Failed to compute hash");
         
+        // Should be different because hash2 contains both elements
         assert_ne!(hash1, hash2);
     }
 
@@ -460,8 +497,8 @@ mod tests {
         let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> = 
             MultiFieldHasher::new_from_ref(&*PALLAS_PARAMS);
         
-        // Test that errors cascade properly - try squeezing empty state
-        let result = hasher.squeeze();
+        // Test that errors cascade properly - try digesting empty state
+        let result = hasher.digest();
         
         // Test error message formatting includes the underlying PoseidonError
         match result {
@@ -475,5 +512,38 @@ mod tests {
             },
             Err(other) => panic!("Unexpected error type: {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_digest_preserves_state_and_finalize() {
+        let mut hasher = PallasHasher::new();
+        
+        // Add some data
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).expect("Failed to update hasher");
+        
+        // Get hash - state should be preserved
+        let first_hash = hasher.digest().expect("Failed to get first digest");
+        assert_ne!(first_hash, ark_pallas::Fq::zero());
+        
+        // State should be preserved - element count should be > 0
+        assert!(hasher.element_count() > 0, "State was not preserved after digest");
+        
+        // Add more data
+        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(100u64))).expect("Failed to update hasher");
+        
+        // Second digest should be different (contains both elements)
+        let second_hash = hasher.digest().expect("Failed to compute second hash");
+        assert_ne!(first_hash, second_hash);
+        
+        // State should still be preserved
+        assert!(hasher.element_count() > 0, "State was cleared after digest");
+        
+        // Test finalize (consumes hasher)
+        let mut hasher2 = PallasHasher::new();
+        hasher2.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64))).expect("Failed to update hasher");
+        let finalized = hasher2.finalize().expect("Failed to finalize");
+        
+        // Should match the first hash (same single input)
+        assert_eq!(first_hash, finalized);
     }
 }

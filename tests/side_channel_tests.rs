@@ -31,7 +31,7 @@ fn test_timing_consistency_field_elements() {
             
             let start = Instant::now();
             hasher.update(PallasInput::ScalarField(*test_case)).unwrap();
-            let _hash = hasher.squeeze().unwrap();
+            let _hash = hasher.digest().unwrap();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -61,7 +61,7 @@ fn test_timing_consistency_input_sizes() {
             
             let start = Instant::now();
             hasher.update_primitive(RustInput::from_bytes(&test_data)).unwrap();
-            let _hash = hasher.squeeze().unwrap();
+            let _hash = hasher.digest().unwrap();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -97,7 +97,7 @@ fn test_timing_consistency_data_patterns() {
             
             let start = Instant::now();
             hasher.update_primitive(RustInput::from_bytes(pattern_data)).unwrap();
-            let _hash = hasher.squeeze().unwrap();
+            let _hash = hasher.digest().unwrap();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -134,8 +134,8 @@ fn test_field_conversion_timing() {
                 MultiFieldHasher::new_from_ref(&*PALLAS_PARAMS);
             
             let start = Instant::now();
-            hasher.absorb(FieldInput::ScalarField(*test_scalar)).unwrap();
-            let _hash = hasher.squeeze().unwrap();
+            hasher.update(FieldInput::ScalarField(*test_scalar)).unwrap();
+            let _hash = hasher.digest().unwrap();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);
@@ -160,7 +160,7 @@ fn test_cross_curve_timing_consistency() {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
         hasher.update_primitive(test_data.clone()).unwrap();
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         pallas_timings.push(start.elapsed());
     }
     all_timings.push(pallas_timings);
@@ -170,7 +170,7 @@ fn test_cross_curve_timing_consistency() {
         let mut hasher = BN254Hasher::new();
         let start = Instant::now();
         hasher.update_primitive(test_data.clone()).unwrap();
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         bn254_timings.push(start.elapsed());
     }
     all_timings.push(bn254_timings);
@@ -180,7 +180,7 @@ fn test_cross_curve_timing_consistency() {
         let mut hasher = BLS12_381Hasher::new();
         let start = Instant::now();
         hasher.update_primitive(test_data.clone()).unwrap();
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         bls381_timings.push(start.elapsed());
     }
     all_timings.push(bls381_timings);
@@ -203,7 +203,7 @@ fn test_cache_timing_effects() {
         
         let start = Instant::now();
         hasher.update_primitive(RustInput::from_bytes(&test_data)).unwrap();
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         let elapsed = start.elapsed();
         
         if round == 0 {
@@ -243,7 +243,7 @@ fn test_branch_prediction_effects() {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
         hasher.update_primitive(RustInput::from_bytes(&predictable_data)).unwrap();
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         predictable_timings.push(start.elapsed());
     }
     
@@ -251,7 +251,7 @@ fn test_branch_prediction_effects() {
         let mut hasher = PallasHasher::new();
         let start = Instant::now();
         hasher.update_primitive(RustInput::from_bytes(&unpredictable_data)).unwrap();
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         unpredictable_timings.push(start.elapsed());
     }
     
@@ -287,7 +287,7 @@ fn test_memory_access_patterns() {
             
             let start = Instant::now();
             hasher.update_primitive(RustInput::from_bytes(test_data)).unwrap();
-            let _hash = hasher.squeeze().unwrap();
+            let _hash = hasher.digest().unwrap();
             let elapsed = start.elapsed();
             
             round_timings.push(elapsed);

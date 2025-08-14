@@ -32,7 +32,7 @@
 //! hasher.update_primitive(RustInput::from_string_slice("hello"))?;
 //! hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4]))?;
 //!
-//! let hash = hasher.squeeze()?;
+//! let hash = hasher.digest()?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 

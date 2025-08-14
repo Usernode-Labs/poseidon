@@ -14,15 +14,21 @@ fn test_memory_zeroization() {
     let secret_data = ark_pallas::Fr::from(0xDEADBEEFu64);
     hasher.update(PallasInput::ScalarField(secret_data)).unwrap();
     
-    let _hash = hasher.squeeze().unwrap();
+    let _hash = hasher.digest().unwrap();
     
-    assert_eq!(hasher.absorbed_count(), 0, "Hasher state was not cleared after squeeze");
+    // digest() now preserves state - use finalize() to consume
+    assert!(hasher.element_count() > 0, "State should be preserved after digest");
+    
+    // Test finalize() consumes the hasher
+    let mut hasher2 = PallasHasher::new();
+    hasher2.update(PallasInput::ScalarField(secret_data)).unwrap();
+    let _final_hash = hasher2.finalize().unwrap(); // hasher2 is consumed here
     
     hasher.update(PallasInput::ScalarField(secret_data)).unwrap();
-    assert!(hasher.absorbed_count() > 0, "Data was not absorbed");
+    assert!(hasher.element_count() > 0, "Data was not added");
     
     hasher.reset();
-    assert_eq!(hasher.absorbed_count(), 0, "Reset did not clear hasher state");
+    assert_eq!(hasher.element_count(), 0, "Reset did not clear hasher state");
     
     drop(hasher);
 }
@@ -66,7 +72,7 @@ fn test_field_conversion_overflow_protection() {
     
     let large_scalar = ark_pallas::Fr::from_le_bytes_mod_order(&[255u8; 32]);
     
-    let result = hasher.absorb(FieldInput::ScalarField(large_scalar));
+    let result = hasher.update(FieldInput::ScalarField(large_scalar));
     
     assert!(result.is_ok(), "Field conversion should handle large scalars safely");
 }
@@ -90,7 +96,7 @@ fn test_basic_timing_consistency() {
         
         let start = Instant::now();
         hasher.update(PallasInput::ScalarField(test_case)).unwrap();
-        let _hash = hasher.squeeze().unwrap();
+        let _hash = hasher.digest().unwrap();
         let duration = start.elapsed();
         
         timings.push(duration);
@@ -123,7 +129,7 @@ fn test_hash_determinism_security() {
         for _ in 0..10 {
             let mut hasher = PallasHasher::new();
             hasher.update_primitive(data.clone()).unwrap();
-            let hash = hasher.squeeze().unwrap();
+            let hash = hasher.digest().unwrap();
             hashes.push(hash.to_string());
         }
         
@@ -170,7 +176,7 @@ fn test_error_cleanup() {
     let cleanup_result = hasher.update_primitive(RustInput::U64(100));
     assert!(cleanup_result.is_ok(), "Hasher not properly cleaned up after error");
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Hasher state corrupted after error");
 }
 
@@ -206,9 +212,9 @@ fn test_parameter_isolation_security() {
     pallas_hasher2.update_primitive(test_data.clone()).unwrap();
     bn254_hasher.update_primitive(test_data).unwrap();
     
-    let pallas_hash1 = pallas_hasher1.squeeze().unwrap();
-    let pallas_hash2 = pallas_hasher2.squeeze().unwrap();
-    let bn254_hash = bn254_hasher.squeeze().unwrap();
+    let pallas_hash1 = pallas_hasher1.digest().unwrap();
+    let pallas_hash2 = pallas_hasher2.digest().unwrap();
+    let bn254_hash = bn254_hasher.digest().unwrap();
     
     assert_eq!(pallas_hash1.to_string(), pallas_hash2.to_string(), 
               "Pallas hasher parameter isolation failed");
@@ -227,6 +233,6 @@ fn test_stack_overflow_protection() {
         assert!(result.is_ok(), "Stack overflow or recursion limit hit at iteration {}", i);
     }
     
-    let hash = hasher.squeeze();
+    let hash = hasher.digest();
     assert!(hash.is_ok(), "Failed to complete hash after many inputs");
 }

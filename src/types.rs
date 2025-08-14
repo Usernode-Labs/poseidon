@@ -39,17 +39,24 @@ where
     
     /// Update the hasher with a field-specific input (Fr, Fq, or curve points).
     fn update(&mut self, input: I) -> HasherResult<()> {
-        self.inner_mut().absorb_field_input(input)
+        self.inner_mut().update_field_input(input)
     }
     
     /// Update the hasher with a primitive Rust type.
     fn update_primitive(&mut self, input: RustInput) -> HasherResult<()> {
-        self.inner_mut().absorb_primitive_input(input)
+        self.inner_mut().update_primitive_input(input)
     }
     
-    /// Squeeze the current hash result and reset the hasher.
-    fn squeeze(&mut self) -> HasherResult<F> {
-        self.inner_mut().squeeze_result()
+    /// Get the current hash result while preserving the hasher state.
+    fn digest(&mut self) -> HasherResult<F> {
+        self.inner_mut().digest_result()
+    }
+    
+    
+    /// Consume the hasher and return the final hash result.
+    /// Equivalent to `digest()` but takes ownership, ensuring the hasher cannot be reused.
+    fn finalize(mut self) -> HasherResult<F> where Self: Sized {
+        self.digest()
     }
     
     /// Reset the hasher state without changing parameters.
@@ -58,9 +65,9 @@ where
         self.inner_mut().reset_hasher()
     }
     
-    /// Returns the current number of absorbed elements.
-    fn absorbed_count(&self) -> usize {
-        self.inner_ref().get_absorbed_count()
+    /// Returns the current number of elements added.
+    fn element_count(&self) -> usize {
+        self.inner_ref().get_element_count()
     }
 }
 
@@ -70,11 +77,11 @@ pub trait InnerHasher<F, I>
 where
     F: PrimeField,
 {
-    fn absorb_field_input(&mut self, input: I) -> HasherResult<()>;
-    fn absorb_primitive_input(&mut self, input: RustInput) -> HasherResult<()>;
-    fn squeeze_result(&mut self) -> HasherResult<F>;
+    fn update_field_input(&mut self, input: I) -> HasherResult<()>;
+    fn update_primitive_input(&mut self, input: RustInput) -> HasherResult<()>;
+    fn digest_result(&mut self) -> HasherResult<F>;
     fn reset_hasher(&mut self);
-    fn get_absorbed_count(&self) -> usize;
+    fn get_element_count(&self) -> usize;
 }
 
 // Implement InnerHasher for MultiFieldHasher to enable delegation
@@ -84,24 +91,24 @@ where
     S: PrimeField,
     G: ark_ec::AffineRepr<BaseField = F>,
 {
-    fn absorb_field_input(&mut self, input: FieldInput<F, S, G>) -> HasherResult<()> {
-        self.absorb(input)
+    fn update_field_input(&mut self, input: FieldInput<F, S, G>) -> HasherResult<()> {
+        self.update(input)
     }
     
-    fn absorb_primitive_input(&mut self, input: RustInput) -> HasherResult<()> {
-        self.absorb_primitive(input)
+    fn update_primitive_input(&mut self, input: RustInput) -> HasherResult<()> {
+        self.update_primitive(input)
     }
     
-    fn squeeze_result(&mut self) -> HasherResult<F> {
-        self.squeeze()
+    fn digest_result(&mut self) -> HasherResult<F> {
+        self.digest()
     }
     
     fn reset_hasher(&mut self) {
         self.reset()
     }
     
-    fn get_absorbed_count(&self) -> usize {
-        self.absorbed_count()
+    fn get_element_count(&self) -> usize {
+        self.element_count()
     }
 }
 

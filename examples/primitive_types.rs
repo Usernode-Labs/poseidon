@@ -26,7 +26,7 @@ fn main() {
     hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4, 5, 255])).expect("Failed to update with bytes");
     println!("  • Added bytes: [1, 2, 3, 4, 5, 255]");
     
-    let hash1 = hasher.squeeze().expect("Failed to compute hash");
+    let hash1 = hasher.digest().expect("Failed to compute hash");
     println!("\n🔥 Hash (byte-efficient mode): {}", hash1);
     
     // Demonstrate the enum-based API
@@ -35,7 +35,7 @@ fn main() {
     hasher.update_primitive(RustInput::U128(999999999999999u128)).expect("Failed to update with primitive");
     hasher.update_primitive(RustInput::String("Enum API test".to_string())).expect("Failed to update with primitive");
     
-    let hash2 = hasher.squeeze().expect("Failed to compute hash");
+    let hash2 = hasher.digest().expect("Failed to compute hash");
     println!("Hash with enum API: {}", hash2);
     
     // Demonstrate circuit-friendly mode
@@ -46,7 +46,7 @@ fn main() {
     });
     
     circuit_hasher.update_primitive(RustInput::from_bytes(&[1, 2, 3, 4, 5])).expect("Failed to update circuit hasher");
-    let hash3 = circuit_hasher.squeeze().expect("Failed to compute circuit hash");
+    let hash3 = circuit_hasher.digest().expect("Failed to compute circuit hash");
     println!("Circuit-friendly hash: {}", hash3);
     
     // Mix field elements and primitive types
@@ -56,7 +56,7 @@ fn main() {
     hasher.update_primitive(RustInput::U64(100)).expect("Failed to update with u64");
     hasher.update_primitive(RustInput::from_string_slice("mixed types")).expect("Failed to update with string");
     
-    let hash4 = hasher.squeeze().expect("Failed to compute mixed hash");
+    let hash4 = hasher.digest().expect("Failed to compute mixed hash");
     println!("Mixed hash: {}", hash4);
     
     // Demonstrate deterministic hashing
@@ -76,8 +76,8 @@ fn main() {
         hasher2.update_primitive(input.clone()).expect("Failed to update hasher2");
     }
     
-    let hash_a = hasher1.squeeze().expect("Failed to compute deterministic hash A");
-    let hash_b = hasher2.squeeze().expect("Failed to compute deterministic hash B");
+    let hash_a = hasher1.digest().expect("Failed to compute deterministic hash A");
+    let hash_b = hasher2.digest().expect("Failed to compute deterministic hash B");
     
     if hash_a == hash_b {
         println!("✅ Deterministic hashing works! Both hashes match: {}", hash_a);
@@ -95,7 +95,7 @@ fn main() {
         ..Default::default()
     });
     byte_efficient_hasher.update_primitive(RustInput::from_bytes(&test_bytes)).expect("Failed to update byte efficient");
-    let _hash_efficient = byte_efficient_hasher.squeeze().expect("Failed to compute efficient hash");
+    let _hash_efficient = byte_efficient_hasher.digest().expect("Failed to compute efficient hash");
     let byte_efficient_time = start.elapsed();
     
     let start = std::time::Instant::now();
@@ -104,7 +104,7 @@ fn main() {
         ..Default::default()
     });
     circuit_friendly_hasher.update_primitive(RustInput::from_bytes(&test_bytes)).expect("Failed to update circuit friendly");
-    let _hash_circuit = circuit_friendly_hasher.squeeze().expect("Failed to compute circuit hash");
+    let _hash_circuit = circuit_friendly_hasher.digest().expect("Failed to compute circuit hash");
     let circuit_friendly_time = start.elapsed();
     
     println!("  • Byte-efficient mode: {:?}", byte_efficient_time);
@@ -116,6 +116,6 @@ fn main() {
     println!("\n📦 Large input handling:");
     let large_string = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(100);
     hasher.update_primitive(RustInput::from_string_slice(&large_string)).expect("Failed to update with large string");
-    let hash_large = hasher.squeeze().expect("Failed to compute large hash");
+    let hash_large = hasher.digest().expect("Failed to compute large hash");
     println!("Hash of large string ({} chars): {}", large_string.len(), hash_large);
 }

@@ -34,7 +34,7 @@ where
     for item in data {
         hasher.update_primitive(item.clone())?;
     }
-    Ok(hasher.squeeze()?.to_string())
+    Ok(hasher.digest()?.to_string())
 }
 
 fn hash_with_config<H, F, I>(data: &[RustInput], config: PackingConfig) -> Result<String, HasherError>
@@ -46,5 +46,5 @@ where
     for item in data {
         hasher.update_primitive(item.clone())?;
     }
-    Ok(hasher.squeeze()?.to_string())
+    Ok(hasher.digest()?.to_string())
 }

@@ -8,11 +8,11 @@ fn main() -> Result<(), HasherError> {
     
     let mut pallas = PallasHasher::new();
     pallas.update_primitive(data.clone())?;
-    let pallas_hash = pallas.squeeze()?;
+    let pallas_hash = pallas.digest()?;
     
     let mut bn254 = BN254Hasher::new();
     bn254.update_primitive(data)?;
-    let bn254_hash = bn254.squeeze()?;
+    let bn254_hash = bn254.digest()?;
     
     println!("Pallas hash: {}", pallas_hash);
     println!("BN254 hash:  {}", bn254_hash);
