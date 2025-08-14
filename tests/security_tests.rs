@@ -192,8 +192,8 @@ fn test_packing_buffer_overflow() {
         buffer.push_bytes(&[1, 2, 3, 4, 5]);
     }
     
-    let byte_count = buffer.byte_count();
-    assert_eq!(byte_count, 5000, "Byte counting overflow detected");
+    // Check buffer length
+    assert_eq!(buffer.len(), 5000, "Byte counting overflow detected");
     
     let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>();
     assert!(field_elements.is_ok(), "Field element extraction failed after large input");

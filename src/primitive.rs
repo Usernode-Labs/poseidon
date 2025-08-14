@@ -180,25 +180,6 @@ impl PackingBuffer {
         self.bytes.push_back(if value { 1u8 } else { 0u8 });
     }
     
-    /// Add an integer to the buffer using little-endian byte representation.
-    pub fn push_integer<T>(&mut self, value: T) 
-    where
-        T: Into<u128>,
-    {
-        let value_u128: u128 = value.into();
-        
-        // Determine the minimum number of bytes needed
-        let bytes_needed = if value_u128 == 0 {
-            1 // Always use at least 1 byte
-        } else {
-            (128 - value_u128.leading_zeros()).div_ceil(8) as usize
-        };
-        
-        // Convert to little-endian bytes, using only the necessary bytes
-        let all_bytes = value_u128.to_le_bytes();
-        self.bytes.extend(&all_bytes[..bytes_needed]);
-    }
-    
     /// Add a string to the buffer with length prefix.
     pub fn push_string(&mut self, s: &str) {
         let bytes = s.as_bytes();
@@ -300,16 +281,6 @@ impl PackingBuffer {
         Ok(field_elements)
     }
     
-    /// Get the number of bytes currently in the buffer.
-    pub fn byte_count(&self) -> usize {
-        self.bytes.len()
-    }
-    
-    /// Check if the buffer is empty.
-    pub fn is_empty(&self) -> bool {
-        self.bytes.is_empty()
-    }
-    
     /// Clear all bytes from the buffer.
     /// 
     /// This method securely zeroizes the buffer contents to prevent sensitive
@@ -321,24 +292,34 @@ impl PackingBuffer {
         }
         self.bytes.clear();
     }
+    
+    /// Returns the number of bytes in the buffer.
+    /// 
+    /// This is primarily for testing and debugging purposes.
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
 }
 
 /// Serialize a RustInput into bytes for packing.
 pub fn serialize_rust_input(input: &RustInput, buffer: &mut PackingBuffer) -> HasherResult<()> {
     match input {
         RustInput::Bool(b) => buffer.push_bool(*b),
-        RustInput::U8(n) => buffer.push_integer(*n as u128),
-        RustInput::U16(n) => buffer.push_integer(*n as u128),
-        RustInput::U32(n) => buffer.push_integer(*n as u128),
-        RustInput::U64(n) => buffer.push_integer(*n as u128),
-        RustInput::U128(n) => buffer.push_integer(*n),
-        RustInput::Usize(n) => buffer.push_integer(*n as u128),
-        RustInput::I8(n) => buffer.push_integer((*n as i128) as u128), // Sign-extend then cast
-        RustInput::I16(n) => buffer.push_integer((*n as i128) as u128),
-        RustInput::I32(n) => buffer.push_integer((*n as i128) as u128),
-        RustInput::I64(n) => buffer.push_integer((*n as i128) as u128),
-        RustInput::I128(n) => buffer.push_integer(*n as u128), // Bit pattern preserved
-        RustInput::Isize(n) => buffer.push_integer((*n as i128) as u128),
+        // Unsigned integers - direct conversion is safe
+        RustInput::U8(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::U16(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::U32(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::U64(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::U128(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::Usize(n) => buffer.push_bytes(&n.to_le_bytes()),
+        // Signed integers - preserve bit pattern via to_le_bytes
+        RustInput::I8(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::I16(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::I32(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::I64(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::I128(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::Isize(n) => buffer.push_bytes(&n.to_le_bytes()),
+        // Strings and bytes
         RustInput::String(s) | RustInput::Str(s) => buffer.push_string(s),
         RustInput::Bytes(bytes) | RustInput::ByteSlice(bytes) => {
             buffer.push_varint(bytes.len());
@@ -376,8 +357,8 @@ mod tests {
         buffer.push_bool(false);
         buffer.push_bool(true);
         
-        assert_eq!(buffer.byte_count(), 3);
-        assert!(!buffer.is_empty());
+        assert_eq!(buffer.len(), 3);
+        assert!(buffer.len() > 0);
     }
     
     #[test]
@@ -385,13 +366,13 @@ mod tests {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
         
-        // Test various integer sizes
-        buffer.push_integer(0u8);
-        buffer.push_integer(255u16);
-        buffer.push_integer(65535u32);
+        // Test various integer sizes using push_bytes
+        buffer.push_bytes(&0u8.to_le_bytes());
+        buffer.push_bytes(&255u8.to_le_bytes());
+        buffer.push_bytes(&65535u16.to_le_bytes());
         
         // Should have: 1 byte (0) + 1 byte (255) + 2 bytes (65535) = 4 bytes
-        assert_eq!(buffer.byte_count(), 4);
+        assert_eq!(buffer.len(), 4);
     }
     
     #[test]
@@ -402,7 +383,7 @@ mod tests {
         buffer.push_string("hello");
         
         // Should have: length prefix (1 byte for "5") + 5 bytes for "hello"
-        assert_eq!(buffer.byte_count(), 6);
+        assert_eq!(buffer.len(), 6);
     }
     
     #[test]
@@ -412,14 +393,14 @@ mod tests {
         
         // Add enough bytes to create field elements
         for i in 0..100u8 {
-            buffer.push_integer(i);
+            buffer.push_bytes(&[i]);
         }
         
         let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>().unwrap();
         assert!(!field_elements.is_empty());
         
         // Some bytes should remain
-        assert!(!buffer.is_empty() || buffer.byte_count() == 0);
+        assert!(buffer.len() > 0 || buffer.len() == 0);
     }
     
     #[test]
@@ -450,7 +431,7 @@ mod tests {
         serialize_rust_input(&RustInput::U64(12345), &mut buffer).unwrap();
         serialize_rust_input(&RustInput::String("test".to_string()), &mut buffer).unwrap();
         
-        assert!(buffer.byte_count() > 0);
+        assert!(buffer.len() > 0);
     }
     
     #[test]
@@ -465,6 +446,6 @@ mod tests {
         
         // Should produce exactly one field element with padding
         assert_eq!(field_elements.len(), 1);
-        assert!(buffer.is_empty());
+        assert_eq!(buffer.len(), 0);
     }
 }
