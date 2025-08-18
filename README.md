@@ -1,22 +1,22 @@
 # Poseidon Hash Library
 
-Type-safe, multi-curve Poseidon hash with domain/type separation and an arkworks Poseidon sponge backend.
+Type‑safe, multi‑curve Poseidon hash with domain/type separation and an arkworks Poseidon sponge backend.
 
 ## Features
 
-- Poseidon sponge (arkworks): t=3, rate=2, standard 10*1 padding
+- Poseidon sponge (arkworks): t=3, rate=2, capacity=1
 - Domain separation: per-hasher domain strings to namespace outputs
 - Type tags: disambiguate BaseField, ScalarField, CurvePoint (finite/infinity), and primitives
-- Primitive packing: byte-efficient (default) or circuit-friendly
+- Primitive packing: byte‑efficient (default) or circuit‑friendly
 - Multi-curve: Pallas, Vesta, BN254, BLS12-381, BLS12-377 (embedded parameters)
-- Secure memory handling: sensitive buffers zeroized on drop/reset
+- Memory hygiene: primitive packing buffers zeroized on drop/reset
 
 ## Installation
 
 Add this to your `Cargo.toml`:
 
 ```toml
-[dependencies]
+[dependencies] 
 poseidon-hash = "0.1"
 ```
 
@@ -24,7 +24,7 @@ poseidon-hash = "0.1"
 
 ```rust
 use poseidon_hash::*;
-use poseidon_hash::PoseidonHasher; // brings new/update/digest into scope
+use poseidon_hash::PoseidonHasher; // brings update/digest/reset/finalize into scope
 use ark_ec::AffineRepr;
 
 // Create a namespaced hasher (recommended)
@@ -74,12 +74,11 @@ let mut pallas_hasher = PallasHasher::new();  // Pallas parameters
 let mut bn254_hasher = BN254Hasher::new();    // BN254 parameters
 
 // Each hasher only accepts its own curve's field types
-pallas_hasher.update(ark_pallas::Fr::from(123u64))?;  // ✓ Pallas scalar
-bn254_hasher.update(ark_bn254::Fr::from(123u64))?;    // ✓ BN254 scalar
+pallas_hasher.update(ark_pallas::Fr::from(123u64));  // ✓ Pallas scalar
+bn254_hasher.update(ark_bn254::Fr::from(123u64));    // ✓ BN254 scalar
 
 // Mixing field types across curves won't compile:
-// pallas_hasher.update(ark_bn254::Fr::from(123u64))?;  // ✗ Type error
-# Ok::<(), Box<dyn std::error::Error>>(())
+// pallas_hasher.update(ark_bn254::Fr::from(123u64));  // ✗ Type error
 ```
 
 ## Supported Curves
@@ -92,26 +91,7 @@ bn254_hasher.update(ark_bn254::Fr::from(123u64))?;    // ✓ BN254 scalar
 | **BLS12-381** | Fr: 255, Fq: 381 | Ethereum 2.0, Zcash |
 | **BLS12-377** | Fr: 253, Fq: 377 | Celo, recursive proofs |
 
-## Multi-Curve Support
-
-```rust
-use poseidon_hash::{BN254Hasher, BLS12_381Hasher, VestaHasher};
-
-// BN254 (Ethereum)
-let mut bn254_hasher = BN254Hasher::new();
-bn254_hasher.update(ark_bn254::Fr::from(42u64));
-let bn254_hash = bn254_hasher.digest();
-
-// BLS12-381 (Ethereum 2.0)  
-let mut bls_hasher = BLS12_381Hasher::new();
-bls_hasher.update(ark_bls12_381::Fr::from(42u64));
-let bls_hash = bls_hasher.digest();
-
-// Vesta (Mina Protocol)
-let mut vesta_hasher = VestaHasher::new();
-vesta_hasher.update(ark_vesta::Fq::from(123u64));
-let vesta_hash = vesta_hasher.digest();
-```
+<!-- Multi-curve example covered above; omitted duplicate section. -->
 
 ## Primitive Type Support
 
@@ -187,11 +167,10 @@ cargo test security_tests
 
 ## Security
 
-- **128-bit security level** against known cryptographic attacks
-- **Collision resistance** - Computationally infeasible to find collisions
-- **Preimage resistance** - Cannot find input from hash output
-- **Official parameters** - Generated using the Poseidon reference implementation
-- **Memory safety** - Sensitive data is zeroized on drop
+- 128-bit security level (parameterized Poseidon, t=3)
+- Arkworks Poseidon sponge backend (absorb/squeeze API)
+- Domain and type tags to prevent cross-type collisions
+- Primitive packing buffers are zeroized on drop/reset
 
 ## Architecture
 
@@ -205,17 +184,17 @@ cargo test security_tests
 
 ### Field Conversion
 
-The library automatically handles different field size relationships:
+Current behavior:
 
-1. **Same or smaller bit size**: Bytes embed directly into Fq (tagged)
-2. **Fr >= Fq** (future): Decompose into limbs less than Fq and absorb with tags
+1. If `Fr` bit size ≤ `Fq` bit size, `Fr` is converted via little‑endian bytes and absorbed as a base field element (tagged as scalar).
+2. If `Fr` bit size > `Fq` bit size, this is not supported and will panic at runtime (unimplemented).
 
 ## Error Types
 
-### Error Types
+Internal error definitions exist (`HasherError`), but the public `update/digest` API is infallible in normal operation.
 
-- `PointConversionFailed` – Failed to extract curve point coordinates
-- `NumericConversionFailed { reason }` – Numeric conversion failed
+- `PointConversionFailed` – failed to extract curve point coordinates
+- `NumericConversionFailed { reason }` – numeric conversion failed
 
 ## License
 
@@ -223,11 +202,10 @@ MIT OR Apache-2.0
 
 ## Contributing
 
-Contributions welcome! Please ensure:
+Please ensure:
 - All tests pass (`cargo test`)
 - No clippy warnings (`cargo clippy`)
 - Documentation builds (`cargo doc`)
-- Security considerations are addressed
 
 ## Acknowledgments
 

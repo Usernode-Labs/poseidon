@@ -6,16 +6,16 @@
 //! ## Packing Strategies
 //!
 //! ### Byte-Efficient Mode (Default)
-//! - **Bools**: 8 bools per byte, then bytes into field elements
-//! - **Integers**: Native byte representation (little-endian)
-//! - **Strings/Bytes**: Length-prefixed, then packed into field elements
-//! - **Goal**: Minimize field element usage for storage/bandwidth efficiency
+//! - Bools: 1 byte per bool (0x00/0x01), then bytes are packed into field elements
+//! - Integers: Native little-endian byte representation
+//! - Strings/Bytes: Varint length prefix, then bytes; packed into field elements
+//! - Goal: Minimize field element usage for storage/bandwidth efficiency
 //!
 //! ### Circuit-Friendly Mode
-//! - **Bools**: Each bool becomes a field element (0 or 1)
-//! - **Integers**: Each integer becomes a field element directly
-//! - **Strings/Bytes**: Each byte becomes a field element
-//! - **Goal**: Minimize constraint count in zero-knowledge circuits
+//! - Bools: Each bool becomes a field element (0 or 1)
+//! - Integers: Each integer becomes a field element directly
+//! - Strings/Bytes: Each byte becomes its own field element
+//! - Goal: Minimize constraint count in zero-knowledge circuits
 //!
 //! ## Usage
 //!
