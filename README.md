@@ -187,7 +187,7 @@ cargo test security_tests
 Current behavior:
 
 1. If `Fr` bit size ≤ `Fq` bit size, `Fr` is converted via little‑endian bytes and absorbed as a base field element (tagged as scalar).
-2. If `Fr` bit size > `Fq` bit size, this is not supported and will panic at runtime (unimplemented).
+2. If `Fr` bit size > `Fq` bit size, this is not supported. Constructors perform a guard check and will panic for such curve configurations.
 
 ## Error Types
 

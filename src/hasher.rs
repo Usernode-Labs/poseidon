@@ -132,6 +132,17 @@ where
     S: PrimeField,
     G: AffineRepr<BaseField = F>,
 {
+    #[inline]
+    fn assert_scalar_fits_base_field() {
+        // We intentionally keep the API infallible. Enforce at construction time
+        // that the scalar field does not exceed the base field by bit size.
+        // This avoids ambiguous Fr→Fq mappings for unsupported curves.
+        if S::MODULUS_BIT_SIZE > F::MODULUS_BIT_SIZE {
+            panic!("Unsupported curve configuration: Fr bit size ({}) exceeds Fq bit size ({}). This library does not support Fr→Fq limb decomposition.",
+                S::MODULUS_BIT_SIZE, F::MODULUS_BIT_SIZE);
+        }
+    }
+
     fn max_bytes_per_field() -> usize {
         let field_bits = F::MODULUS_BIT_SIZE as usize;
         let safe_bits = field_bits.saturating_sub(SAFETY_MARGIN_BITS);
@@ -143,6 +154,7 @@ where
     ///
     /// * `params` - Poseidon parameters for the base field F
     pub fn new(params: crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self {
+        Self::assert_scalar_fits_base_field();
         let sponge = ArkPoseidonSponge::new(&params);
         Self {
             base_sponge: sponge.clone(),
@@ -165,6 +177,7 @@ where
     where
         F: Clone,
     {
+        Self::assert_scalar_fits_base_field();
         Self::new(crate::parameters::clone_parameters(params))
     }
     
@@ -175,6 +188,7 @@ where
     /// * `params` - Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
     pub fn new_with_config(params: crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self {
+        Self::assert_scalar_fits_base_field();
         let sponge = ArkPoseidonSponge::new(&params);
         Self {
             base_sponge: sponge.clone(),
@@ -198,6 +212,7 @@ where
     where
         F: Clone,
     {
+        Self::assert_scalar_fits_base_field();
         Self::new_with_config(crate::parameters::clone_parameters(params), packing_config)
     }
 
@@ -244,7 +259,7 @@ where
     /// Handles different field bit size relationships:
     /// * Same bit size: Simple byte representation conversion
     /// * Fr < Fq: Direct conversion without data loss
-    /// * Fr > Fq: Not supported
+    /// * Fr > Fq: Not supported (guarded at construction time)
     pub fn update_scalar_field(&mut self, element: S) {
         // Tag scalar field input
         let v = vec![F::from(TAG_SCALAR_FIELD as u64)];
@@ -261,8 +276,8 @@ where
             self.sponge.absorb(&v);
             self.count += 1;
         } else {
-            // Fr larger than Fq - need to decompose (rare case)
-            unimplemented!("We do not support curves where Fr > Fq");
+            // Should be unreachable due to constructor guard.
+            panic!("Unsupported curve configuration encountered at runtime: Fr bit size ({}) exceeds Fq bit size ({}).", fr_bits, fq_bits);
         }
     }
 
