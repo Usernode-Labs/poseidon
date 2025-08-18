@@ -4,7 +4,6 @@
 //! arkworks' Poseidon sponge from `ark-crypto-primitives`.
 //! We introduce thin wrappers and type aliases to minimize ripple effects.
 
-use ark_ff::PrimeField;
 use ark_crypto_primitives::sponge::poseidon::{PoseidonConfig, PoseidonSponge};
 
 /// Re-export config and sponge types for convenience.

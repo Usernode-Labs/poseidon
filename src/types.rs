@@ -110,417 +110,89 @@ where
     }
 }
 
-// Pallas curve hasher
-/// Pallas curve multi-field hasher with embedded parameters.
-/// Pallas is a 255-bit curve used in the Mina Protocol for recursive SNARKs.
-/// 
-/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
-#[derive(ZeroizeOnDrop)]
-pub struct PallasHasher {
-    inner: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>,
-}
-
-impl PoseidonHasher<ark_pallas::Fq, PallasInput> for PallasHasher {
-    fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*pallas::PALLAS_PARAMS),
+// Macro to define curve-specific hasher types and impls
+macro_rules! define_curve_hasher {
+    (
+        $Hasher:ident, $Input:ident,
+        fq = $fq:path,
+        fr = $fr:path,
+        affine = $aff:path,
+        params = $params:path
+    ) => {
+        #[derive(ZeroizeOnDrop)]
+        pub struct $Hasher {
+            inner: MultiFieldHasher<$fq, $fr, $aff>,
         }
-    }
-    
-    fn new_with_config(config: PackingConfig) -> Self {
-        Self {
-            inner: MultiFieldHasher::new_with_config_from_ref(&*pallas::PALLAS_PARAMS, config),
+
+        impl PoseidonHasher<$fq, $Input> for $Hasher {
+            fn new() -> Self {
+                Self { inner: MultiFieldHasher::new_from_ref(&$params) }
+            }
+
+            fn new_with_config(config: PackingConfig) -> Self {
+                Self { inner: MultiFieldHasher::new_with_config_from_ref(&$params, config) }
+            }
+
+            fn inner_mut(&mut self) -> &mut dyn InnerHasher<$fq, $Input> { &mut self.inner }
+            fn inner_ref(&self) -> &dyn InnerHasher<$fq, $Input> { &self.inner }
         }
-    }
-    
-    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_pallas::Fq, PallasInput> {
-        &mut self.inner
-    }
-    
-    fn inner_ref(&self) -> &dyn InnerHasher<ark_pallas::Fq, PallasInput> {
-        &self.inner
-    }
-}
 
-impl Default for PallasHasher {
-    fn default() -> Self {
-        <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new()
-    }
-}
+        impl Default for $Hasher { fn default() -> Self { <Self as PoseidonHasher<$fq, $Input>>::new() } }
 
-/// Type alias for Pallas curve field input enum.
-pub type PallasInput = FieldInput<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>;
+        pub type $Input = FieldInput<$fq, $fr, $aff>;
+        impl From<$fq> for $Input { fn from(v: $fq) -> Self { Self::BaseField(v) } }
+        impl From<$fr> for $Input { fn from(v: $fr) -> Self { Self::ScalarField(v) } }
+        impl From<$aff> for $Input { fn from(v: $aff) -> Self { Self::CurvePoint(v) } }
 
-// Curve-specific From implementations for field types
-impl From<ark_pallas::Fq> for PallasInput {
-    fn from(value: ark_pallas::Fq) -> Self {
-        Self::BaseField(value)
-    }
-}
-
-impl From<ark_pallas::Fr> for PallasInput {
-    fn from(value: ark_pallas::Fr) -> Self {
-        Self::ScalarField(value)
-    }
-}
-
-impl From<ark_pallas::Affine> for PallasInput {
-    fn from(value: ark_pallas::Affine) -> Self {
-        Self::CurvePoint(value)
-    }
-}
-
-impl PallasHasher {
-    pub fn new() -> Self {
-        <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new()
-    }
-    pub fn new_with_config(config: PackingConfig) -> Self {
-        <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new_with_config(config)
-    }
-}
-impl PallasHasher {
-    /// Create a new hasher namespaced with a domain string.
-    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new();
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-
-    /// Create a new hasher with custom packing and a domain string.
-    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new_with_config(config);
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-}
-
-
-
-// Vesta curve hasher
-/// Vesta curve multi-field hasher with embedded parameters.
-/// Vesta forms a cycle with Pallas for efficient recursive proofs.
-/// 
-/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
-#[derive(ZeroizeOnDrop)]
-pub struct VestaHasher {
-    inner: MultiFieldHasher<ark_vesta::Fq, ark_vesta::Fr, ark_vesta::Affine>,
-}
-
-impl PoseidonHasher<ark_vesta::Fq, VestaInput> for VestaHasher {
-    fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*vesta::VESTA_PARAMS),
+        impl $Hasher {
+            pub fn new() -> Self { <Self as PoseidonHasher<$fq, $Input>>::new() }
+            pub fn new_with_config(config: PackingConfig) -> Self { <Self as PoseidonHasher<$fq, $Input>>::new_with_config(config) }
+            pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+                let mut h = <Self as PoseidonHasher<$fq, $Input>>::new(); h.inner.absorb_domain(domain.as_ref()); h
+            }
+            pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+                let mut h = <Self as PoseidonHasher<$fq, $Input>>::new_with_config(config); h.inner.absorb_domain(domain.as_ref()); h
+            }
         }
-    }
-    
-    fn new_with_config(config: PackingConfig) -> Self {
-        Self {
-            inner: MultiFieldHasher::new_with_config_from_ref(&*vesta::VESTA_PARAMS, config),
-        }
-    }
-    
-    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_vesta::Fq, VestaInput> {
-        &mut self.inner
-    }
-    
-    fn inner_ref(&self) -> &dyn InnerHasher<ark_vesta::Fq, VestaInput> {
-        &self.inner
-    }
+    };
 }
 
-impl Default for VestaHasher {
-    fn default() -> Self {
-        <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new()
-    }
-}
+define_curve_hasher!(
+    PallasHasher, PallasInput,
+    fq = ark_pallas::Fq,
+    fr = ark_pallas::Fr,
+    affine = ark_pallas::Affine,
+    params = pallas::PALLAS_PARAMS
+);
 
-/// Type alias for Vesta curve field input enum.
-pub type VestaInput = FieldInput<ark_vesta::Fq, ark_vesta::Fr, ark_vesta::Affine>;
+define_curve_hasher!(
+    VestaHasher, VestaInput,
+    fq = ark_vesta::Fq,
+    fr = ark_vesta::Fr,
+    affine = ark_vesta::Affine,
+    params = vesta::VESTA_PARAMS
+);
 
-// Curve-specific From implementations for field types
-impl From<ark_vesta::Fq> for VestaInput {
-    fn from(value: ark_vesta::Fq) -> Self {
-        Self::BaseField(value)
-    }
-}
+define_curve_hasher!(
+    BN254Hasher, BN254Input,
+    fq = ark_bn254::Fq,
+    fr = ark_bn254::Fr,
+    affine = ark_bn254::G1Affine,
+    params = bn254::BN254_PARAMS
+);
 
-impl From<ark_vesta::Fr> for VestaInput {
-    fn from(value: ark_vesta::Fr) -> Self {
-        Self::ScalarField(value)
-    }
-}
+define_curve_hasher!(
+    BLS12_381Hasher, BLS12_381Input,
+    fq = ark_bls12_381::Fq,
+    fr = ark_bls12_381::Fr,
+    affine = ark_bls12_381::G1Affine,
+    params = bls12_381::BLS12_381_PARAMS
+);
 
-impl From<ark_vesta::Affine> for VestaInput {
-    fn from(value: ark_vesta::Affine) -> Self {
-        Self::CurvePoint(value)
-    }
-}
-
-impl VestaHasher {
-    pub fn new() -> Self {
-        <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new()
-    }
-    pub fn new_with_config(config: PackingConfig) -> Self {
-        <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new_with_config(config)
-    }
-}
-impl VestaHasher {
-    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new();
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-
-    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new_with_config(config);
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-}
-
-// BN254 curve hasher
-/// BN254 curve multi-field hasher with embedded parameters.
-/// BN254 is widely used in Ethereum and zkSNARK applications.
-/// 
-/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
-#[derive(ZeroizeOnDrop)]
-pub struct BN254Hasher {
-    inner: MultiFieldHasher<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>,
-}
-
-impl PoseidonHasher<ark_bn254::Fq, BN254Input> for BN254Hasher {
-    fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*bn254::BN254_PARAMS),
-        }
-    }
-    
-    fn new_with_config(config: PackingConfig) -> Self {
-        Self {
-            inner: MultiFieldHasher::new_with_config_from_ref(&*bn254::BN254_PARAMS, config),
-        }
-    }
-    
-    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bn254::Fq, BN254Input> {
-        &mut self.inner
-    }
-    
-    fn inner_ref(&self) -> &dyn InnerHasher<ark_bn254::Fq, BN254Input> {
-        &self.inner
-    }
-}
-
-impl Default for BN254Hasher {
-    fn default() -> Self {
-        <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new()
-    }
-}
-
-/// Type alias for BN254 curve field input enum.
-pub type BN254Input = FieldInput<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>;
-
-// Curve-specific From implementations for field types
-impl From<ark_bn254::Fq> for BN254Input {
-    fn from(value: ark_bn254::Fq) -> Self {
-        Self::BaseField(value)
-    }
-}
-
-impl From<ark_bn254::Fr> for BN254Input {
-    fn from(value: ark_bn254::Fr) -> Self {
-        Self::ScalarField(value)
-    }
-}
-
-impl From<ark_bn254::G1Affine> for BN254Input {
-    fn from(value: ark_bn254::G1Affine) -> Self {
-        Self::CurvePoint(value)
-    }
-}
-
-impl BN254Hasher {
-    pub fn new() -> Self {
-        <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new()
-    }
-    pub fn new_with_config(config: PackingConfig) -> Self {
-        <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new_with_config(config)
-    }
-}
-impl BN254Hasher {
-    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new();
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-
-    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new_with_config(config);
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-}
-
-// BLS12-381 curve hasher
-/// BLS12-381 curve multi-field hasher with embedded parameters.
-/// BLS12-381 is used in Ethereum 2.0 and Zcash.
-/// 
-/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
-#[derive(ZeroizeOnDrop)]
-pub struct BLS12_381Hasher {
-    inner: MultiFieldHasher<ark_bls12_381::Fq, ark_bls12_381::Fr, ark_bls12_381::G1Affine>,
-}
-
-impl PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input> for BLS12_381Hasher {
-    fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*bls12_381::BLS12_381_PARAMS),
-        }
-    }
-    
-    fn new_with_config(config: PackingConfig) -> Self {
-        Self {
-            inner: MultiFieldHasher::new_with_config_from_ref(&*bls12_381::BLS12_381_PARAMS, config),
-        }
-    }
-    
-    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bls12_381::Fq, BLS12_381Input> {
-        &mut self.inner
-    }
-    
-    fn inner_ref(&self) -> &dyn InnerHasher<ark_bls12_381::Fq, BLS12_381Input> {
-        &self.inner
-    }
-}
-
-impl Default for BLS12_381Hasher {
-    fn default() -> Self {
-        <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new()
-    }
-}
-
-/// Type alias for BLS12-381 curve field input enum.
-pub type BLS12_381Input = FieldInput<ark_bls12_381::Fq, ark_bls12_381::Fr, ark_bls12_381::G1Affine>;
-
-// Curve-specific From implementations for field types
-impl From<ark_bls12_381::Fq> for BLS12_381Input {
-    fn from(value: ark_bls12_381::Fq) -> Self {
-        Self::BaseField(value)
-    }
-}
-
-impl From<ark_bls12_381::Fr> for BLS12_381Input {
-    fn from(value: ark_bls12_381::Fr) -> Self {
-        Self::ScalarField(value)
-    }
-}
-
-impl From<ark_bls12_381::G1Affine> for BLS12_381Input {
-    fn from(value: ark_bls12_381::G1Affine) -> Self {
-        Self::CurvePoint(value)
-    }
-}
-
-impl BLS12_381Hasher {
-    pub fn new() -> Self {
-        <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new()
-    }
-    pub fn new_with_config(config: PackingConfig) -> Self {
-        <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new_with_config(config)
-    }
-}
-impl BLS12_381Hasher {
-    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new();
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-
-    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new_with_config(config);
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-}
-
-// BLS12-377 curve hasher
-/// BLS12-377 curve multi-field hasher with embedded parameters.
-/// BLS12-377 is used in Celo and forms cycles with BW6-761.
-/// 
-/// Implements `ZeroizeOnDrop` to ensure sensitive data is cleared from memory.
-#[derive(ZeroizeOnDrop)]
-pub struct BLS12_377Hasher {
-    inner: MultiFieldHasher<ark_bls12_377::Fq, ark_bls12_377::Fr, ark_bls12_377::G1Affine>,
-}
-
-impl PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input> for BLS12_377Hasher {
-    fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*bls12_377::BLS12_377_PARAMS),
-        }
-    }
-    
-    fn new_with_config(config: PackingConfig) -> Self {
-        Self {
-            inner: MultiFieldHasher::new_with_config_from_ref(&*bls12_377::BLS12_377_PARAMS, config),
-        }
-    }
-    
-    fn inner_mut(&mut self) -> &mut dyn InnerHasher<ark_bls12_377::Fq, BLS12_377Input> {
-        &mut self.inner
-    }
-    
-    fn inner_ref(&self) -> &dyn InnerHasher<ark_bls12_377::Fq, BLS12_377Input> {
-        &self.inner
-    }
-}
-
-impl Default for BLS12_377Hasher {
-    fn default() -> Self {
-        <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new()
-    }
-}
-
-/// Type alias for BLS12-377 curve field input enum.
-pub type BLS12_377Input = FieldInput<ark_bls12_377::Fq, ark_bls12_377::Fr, ark_bls12_377::G1Affine>;
-
-// Curve-specific From implementations for field types
-impl From<ark_bls12_377::Fq> for BLS12_377Input {
-    fn from(value: ark_bls12_377::Fq) -> Self {
-        Self::BaseField(value)
-    }
-}
-
-impl From<ark_bls12_377::Fr> for BLS12_377Input {
-    fn from(value: ark_bls12_377::Fr) -> Self {
-        Self::ScalarField(value)
-    }
-}
-
-impl From<ark_bls12_377::G1Affine> for BLS12_377Input {
-    fn from(value: ark_bls12_377::G1Affine) -> Self {
-        Self::CurvePoint(value)
-    }
-}
-
-impl BLS12_377Hasher {
-    pub fn new() -> Self {
-        <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new()
-    }
-    pub fn new_with_config(config: PackingConfig) -> Self {
-        <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new_with_config(config)
-    }
-}
-
-impl BLS12_377Hasher {
-    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new();
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-
-    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
-        let mut h = <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new_with_config(config);
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-}
+define_curve_hasher!(
+    BLS12_377Hasher, BLS12_377Input,
+    fq = ark_bls12_377::Fq,
+    fr = ark_bls12_377::Fr,
+    affine = ark_bls12_377::G1Affine,
+    params = bls12_377::BLS12_377_PARAMS
+);

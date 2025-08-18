@@ -184,10 +184,10 @@ impl PackingBuffer {
     /// We use a conservative approach: (field_bit_size - 8) / 8 to ensure
     /// we never exceed the field modulus when packing bytes.
     fn calculate_max_bytes<F: PrimeField>() -> usize {
+        const SAFETY_MARGIN_BITS: usize = 8;
         let field_bits = F::MODULUS_BIT_SIZE as usize;
-        // Conservative: reserve 8 bits for safety margin
-        let safe_bits = field_bits.saturating_sub(8);
-        std::cmp::max(safe_bits / 8, 1) // At least 1 byte per field element
+        let safe_bits = field_bits.saturating_sub(SAFETY_MARGIN_BITS);
+        std::cmp::max(safe_bits / 8, 1)
     }
     
     /// Add bytes to the buffer.

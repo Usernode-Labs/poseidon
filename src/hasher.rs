@@ -124,6 +124,8 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     _phantom_g: PhantomData<G>,
 }
 
+const SAFETY_MARGIN_BITS: usize = 8;
+
 impl<F, S, G> MultiFieldHasher<F, S, G>
 where
     F: PrimeField + Zero + ark_crypto_primitives::sponge::Absorb,
@@ -132,7 +134,7 @@ where
 {
     fn max_bytes_per_field() -> usize {
         let field_bits = F::MODULUS_BIT_SIZE as usize;
-        let safe_bits = field_bits.saturating_sub(8);
+        let safe_bits = field_bits.saturating_sub(SAFETY_MARGIN_BITS);
         std::cmp::max(safe_bits / 8, 1)
     }
     /// Creates a new multi-field hasher from Poseidon parameters.
