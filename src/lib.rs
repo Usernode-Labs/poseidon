@@ -18,7 +18,7 @@ comprehensive error handling and support for multiple elliptic curves.
 ## Quick Start
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::PallasHasher;
 use ark_ec::AffineRepr;
 
 // Create hasher with embedded parameters
@@ -38,7 +38,7 @@ println!("Hash: {}", hash);
 ## Simple API
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::PallasHasher;
 
 let mut hasher = PallasHasher::new();
 hasher.update(ark_pallas::Fq::from(42u64));
@@ -52,7 +52,7 @@ println!("Hash: {}", hash);
 Each curve hasher embeds its own parameters and field types:
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::{PallasHasher, BN254Hasher};
 
 let mut pallas_hasher = PallasHasher::new();  // Pallas parameters
 let mut bn254_hasher = BN254Hasher::new();    // BN254 parameters
@@ -67,41 +67,27 @@ bn254_hasher.update(ark_bn254::Fr::from(123u64));    // ✓ BN254 scalar
 */
 
 // Re-export main types at crate root for convenience
-pub use hasher::{MultiFieldHasher, FieldInput};
+pub use hasher::{MultiFieldHasher, FieldInput, HasherError, HasherResult};
+pub use parameters::SECURITY_LEVEL;
+pub use primitive::{RustInput, PackingConfig, PackingMode, PaddingMode};
+pub use types::PoseidonHasher;
+
+// Re-export curve-specific hashers and input types
+pub use types::{
+    PallasHasher, PallasInput,
+    BN254Hasher, BN254Input,
+    BLS12_381Hasher, BLS12_381Input,
+    BLS12_377Hasher, BLS12_377Input,
+    VestaHasher, VestaInput,
+};
 
 // Public modules
 pub mod hasher;
 pub mod parameters;
 pub mod primitive;
 pub mod types;
+mod tags;
 
-/// Commonly used types and traits for easy importing.
-/// 
-/// Import this module to get access to all the essential types needed for most use cases:
-/// 
-/// ```rust
-/// use poseidon_hash::prelude::*;
-/// 
-/// // Now you can use curve-specific hashers directly
-/// let mut hasher = PallasHasher::new();
-/// hasher.update(42u64);
-/// let hash = hasher.digest();
-/// ```
-pub mod prelude {
-    pub use crate::hasher::{MultiFieldHasher, FieldInput};
-    pub use crate::parameters::SECURITY_LEVEL;
-    pub use crate::primitive::{RustInput, PackingConfig, PackingMode, PaddingMode};
-    pub use crate::types::PoseidonHasher;
-    
-    // Re-export curve-specific type aliases
-    pub use crate::types::{
-        PallasHasher, PallasInput,
-        BN254Hasher, BN254Input,
-        BLS12_381Hasher, BLS12_381Input,
-        BLS12_377Hasher, BLS12_377Input,
-        VestaHasher, VestaInput,
-    };
-}
 
 #[cfg(test)]
 mod tests {

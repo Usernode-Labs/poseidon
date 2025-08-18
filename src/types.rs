@@ -170,6 +170,22 @@ impl From<ark_pallas::Affine> for PallasInput {
     }
 }
 
+impl PallasHasher {
+    /// Create a new hasher namespaced with a domain string.
+    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new();
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+
+    /// Create a new hasher with custom packing and a domain string.
+    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new_with_config(config);
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+}
+
 
 
 // Vesta curve hasher
@@ -229,6 +245,20 @@ impl From<ark_vesta::Fr> for VestaInput {
 impl From<ark_vesta::Affine> for VestaInput {
     fn from(value: ark_vesta::Affine) -> Self {
         Self::CurvePoint(value)
+    }
+}
+
+impl VestaHasher {
+    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new();
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+
+    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new_with_config(config);
+        h.inner.absorb_domain(domain.as_ref());
+        h
     }
 }
 
@@ -292,6 +322,20 @@ impl From<ark_bn254::G1Affine> for BN254Input {
     }
 }
 
+impl BN254Hasher {
+    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new();
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+
+    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new_with_config(config);
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+}
+
 // BLS12-381 curve hasher
 /// BLS12-381 curve multi-field hasher with embedded parameters.
 /// BLS12-381 is used in Ethereum 2.0 and Zcash.
@@ -352,6 +396,20 @@ impl From<ark_bls12_381::G1Affine> for BLS12_381Input {
     }
 }
 
+impl BLS12_381Hasher {
+    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new();
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+
+    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new_with_config(config);
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+}
+
 // BLS12-377 curve hasher
 /// BLS12-377 curve multi-field hasher with embedded parameters.
 /// BLS12-377 is used in Celo and forms cycles with BW6-761.
@@ -409,5 +467,19 @@ impl From<ark_bls12_377::Fr> for BLS12_377Input {
 impl From<ark_bls12_377::G1Affine> for BLS12_377Input {
     fn from(value: ark_bls12_377::G1Affine) -> Self {
         Self::CurvePoint(value)
+    }
+}
+
+impl BLS12_377Hasher {
+    pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new();
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+
+    pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+        let mut h = <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new_with_config(config);
+        h.inner.absorb_domain(domain.as_ref());
+        h
     }
 }

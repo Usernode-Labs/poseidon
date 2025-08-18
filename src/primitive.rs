@@ -21,7 +21,7 @@
 //!
 //! ```rust
 //! use poseidon_hash::primitive::{RustInput, PackingMode};
-//! use poseidon_hash::prelude::*;
+//! use poseidon_hash::PallasHasher;
 //!
 //! let mut hasher = PallasHasher::new();
 //!
@@ -38,6 +38,7 @@
 use ark_ff::PrimeField;
 use std::collections::VecDeque;
 use zeroize::{Zeroize, ZeroizeOnDrop};
+use crate::tags::*;
 
 /// Configuration for packing basic Rust types into field elements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -191,6 +192,11 @@ impl PackingBuffer {
     pub fn push_bytes(&mut self, bytes: &[u8]) {
         self.bytes.extend(bytes);
     }
+
+    /// Add a single tag byte to the buffer (used for domain/type separation).
+    pub fn push_tag(&mut self, tag: u8) {
+        self.bytes.push_back(tag);
+    }
     
     /// Add a boolean to the buffer (1 byte: 0x00 or 0x01).
     pub fn push_bool(&mut self, value: bool) {
@@ -328,24 +334,28 @@ impl PackingBuffer {
 /// Serialize a RustInput into bytes for packing.
 pub fn serialize_rust_input(input: &RustInput, buffer: &mut PackingBuffer) {
     match input {
-        RustInput::Bool(b) => buffer.push_bool(*b),
+        RustInput::Bool(b) => {
+            buffer.push_tag(TAG_BOOL);
+            buffer.push_bool(*b)
+        }
         // Unsigned integers - direct conversion is safe
-        RustInput::U8(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::U16(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::U32(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::U64(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::U128(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::Usize(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::U8(n) => { buffer.push_tag(TAG_U8); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::U16(n) => { buffer.push_tag(TAG_U16); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::U32(n) => { buffer.push_tag(TAG_U32); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::U64(n) => { buffer.push_tag(TAG_U64); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::U128(n) => { buffer.push_tag(TAG_U128); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::Usize(n) => { buffer.push_tag(TAG_USIZE); buffer.push_bytes(&n.to_le_bytes()) },
         // Signed integers - preserve bit pattern via to_le_bytes
-        RustInput::I8(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::I16(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::I32(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::I64(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::I128(n) => buffer.push_bytes(&n.to_le_bytes()),
-        RustInput::Isize(n) => buffer.push_bytes(&n.to_le_bytes()),
+        RustInput::I8(n) => { buffer.push_tag(TAG_I8); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::I16(n) => { buffer.push_tag(TAG_I16); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::I32(n) => { buffer.push_tag(TAG_I32); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::I64(n) => { buffer.push_tag(TAG_I64); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::I128(n) => { buffer.push_tag(TAG_I128); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::Isize(n) => { buffer.push_tag(TAG_ISIZE); buffer.push_bytes(&n.to_le_bytes()) },
         // Strings and bytes
-        RustInput::String(s) | RustInput::Str(s) => buffer.push_string(s),
+        RustInput::String(s) | RustInput::Str(s) => { buffer.push_tag(TAG_STRING); buffer.push_string(s) },
         RustInput::Bytes(bytes) | RustInput::ByteSlice(bytes) => {
+            buffer.push_tag(TAG_BYTES);
             buffer.push_varint(bytes.len());
             buffer.push_bytes(bytes);
         }

@@ -39,6 +39,7 @@ use std::marker::PhantomData;
 use thiserror::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::primitive::{RustInput, PackingBuffer, PackingConfig, serialize_rust_input};
+use crate::tags::*;
 
 /// Errors that can occur during hashing operations.
 #[derive(Error, Debug)]
@@ -174,7 +175,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// Overrides the `hash` method to provide a more idiomatic API as we pad the input so it's always two elements.
     /// Safe unwrap since we ensure the input is always two elements.
     fn hash(&mut self, inputs: &[F; 2]) -> F {
-        self.poseidon.hash(inputs).unwrap()
+        self.poseidon.hash(inputs).expect("Poseidon hash failed - should never fail with valid number of inputs")
     }
     
     /// Creates a new multi-field hasher with custom packing configuration from parameter reference.
@@ -190,8 +191,24 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
         Self::new_with_config(crate::parameters::clone_parameters(params), packing_config)
     }
 
+    /// Absorb a domain context as a tagged byte sequence at the start of the state.
+    /// This namespaces the hasher so identical inputs produce different hashes across domains.
+    pub fn absorb_domain(&mut self, domain: &[u8]) {
+        // Field-level domain tag
+        self.state.push(F::from(TAG_DOMAIN_CTX as u64));
+        // Encode the domain bytes through the primitive packing path with its own type tag
+        serialize_rust_input(&RustInput::ByteSlice(domain.to_vec()), &mut self.primitive_buffer);
+        // Extract all elements for the domain and append immediately
+        let elems = self.primitive_buffer.extract_field_elements::<F>();
+        for e in elems { self.state.push(e); }
+        let remaining = self.primitive_buffer.flush_remaining::<F>();
+        for e in remaining { self.state.push(e); }
+    }
+
     /// Absorbs a base field element (Fq) directly into the hasher state.
     pub fn update_base_field(&mut self, element: F) {
+        // Tag then absorb element
+        self.state.push(F::from(TAG_BASE_FIELD as u64));
         self.state.push(element);
     }
 
@@ -202,6 +219,8 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// * Fr < Fq: Direct conversion without data loss
     /// * Fr > Fq: Not supported
     pub fn update_scalar_field(&mut self, element: S) {
+        // Tag scalar field input
+        self.state.push(F::from(TAG_SCALAR_FIELD as u64));
         let fr_bits = S::MODULUS_BIT_SIZE;
         let fq_bits = F::MODULUS_BIT_SIZE;
         
@@ -212,22 +231,20 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
             self.state.push(converted);
         } else {
             // Fr larger than Fq - need to decompose (rare case)
-            unimplemented!("We do not support curves where Fr > Fq"); 
+            unimplemented!("We do not support curves where Fr > Fq");
         }
     }
 
     /// Absorbs a curve point by extracting and hashing its affine coordinates.
     pub fn update_curve_point(&mut self, point: G) {
-        if point.is_zero() {
-            // Point at infinity -> add (0, 0)
-            self.state.push(F::zero());
-            self.state.push(F::zero());
-        } else {
-            // Regular point -> add (x, y) coordinates
-            // safe unwrap per above check, if not zero, point must have coordinates
-            let (x, y) = point.xy().unwrap();
+        if let Some((x, y)) = point.xy() {
+            // Finite point tag then coordinates
+            self.state.push(F::from(TAG_CURVE_POINT_FINITE as u64));
             self.state.push(x);
             self.state.push(y);
+        } else {
+            // Point at infinity - tag only
+            self.state.push(F::from(TAG_CURVE_POINT_INFINITY as u64));
         }
     }
 
@@ -328,7 +345,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// # Example
     /// 
     /// ```rust
-    /// # use poseidon_hash::prelude::*;
+    /// # use poseidon_hash::PallasHasher;
     /// # fn main() {
     /// let mut hasher = PallasHasher::new();
     /// 
