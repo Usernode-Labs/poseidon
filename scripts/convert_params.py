@@ -19,7 +19,7 @@ def convert_to_rust_constants(json_file, curve_name, field_type):
 //! Generated from the official Poseidon reference implementation
 //! with t={metadata['state_size']}, α={metadata['alpha']}, M={metadata['security_level']} security level.
 
-use light_poseidon::PoseidonParameters;
+use crate::ark_poseidon::ArkPoseidonConfig;
 use lazy_static::lazy_static;
 
 /// Number of full rounds
@@ -55,7 +55,7 @@ pub const ROUND_CONSTANTS: [&str; {metadata['num_round_constants']}] = [
     # Add lazy static for parameters
     rust_code += f'''lazy_static! {{
     /// Poseidon parameters for {curve_name} {field_type} field
-    pub static ref {curve_name.upper()}_PARAMS: PoseidonParameters<ark_{curve_name.lower()}::{field_type}> = {{
+    pub static ref {curve_name.upper()}_PARAMS: ArkPoseidonConfig<ark_{curve_name.lower()}::{field_type}> = {{
         use num_bigint::BigUint;
         
         // Parse round constants
@@ -78,14 +78,12 @@ pub const ROUND_CONSTANTS: [&str; {metadata['num_round_constants']}] = [
             mds.push(mds_row);
         }}
         
-        PoseidonParameters {{
+        crate::parameters::create_parameters(
             ark,
             mds,
-            full_rounds: FULL_ROUNDS,
-            partial_rounds: PARTIAL_ROUNDS,
-            width: {metadata['state_size']},
-            alpha: {metadata['alpha']},
-        }}
+            FULL_ROUNDS,
+            PARTIAL_ROUNDS,
+        )
     }};
 }}
 '''

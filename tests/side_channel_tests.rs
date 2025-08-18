@@ -3,7 +3,8 @@
 //! These tests attempt to detect potential side-channel vulnerabilities
 //! through timing analysis and other observable behaviors.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 use std::time::{Duration, Instant};
 use ark_ff::PrimeField;
 

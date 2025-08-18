@@ -88,7 +88,7 @@ where
 // Implement InnerHasher for MultiFieldHasher to enable delegation
 impl<F, S, G> InnerHasher<F, FieldInput<F, S, G>> for MultiFieldHasher<F, S, G>
 where
-    F: PrimeField + ark_ff::Zero,
+    F: PrimeField + ark_ff::Zero + ark_crypto_primitives::sponge::Absorb,
     S: PrimeField,
     G: ark_ec::AffineRepr<BaseField = F>,
 {
@@ -171,6 +171,14 @@ impl From<ark_pallas::Affine> for PallasInput {
 }
 
 impl PallasHasher {
+    pub fn new() -> Self {
+        <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new()
+    }
+    pub fn new_with_config(config: PackingConfig) -> Self {
+        <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new_with_config(config)
+    }
+}
+impl PallasHasher {
     /// Create a new hasher namespaced with a domain string.
     pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
         let mut h = <Self as PoseidonHasher<ark_pallas::Fq, PallasInput>>::new();
@@ -249,6 +257,14 @@ impl From<ark_vesta::Affine> for VestaInput {
 }
 
 impl VestaHasher {
+    pub fn new() -> Self {
+        <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new()
+    }
+    pub fn new_with_config(config: PackingConfig) -> Self {
+        <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new_with_config(config)
+    }
+}
+impl VestaHasher {
     pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
         let mut h = <Self as PoseidonHasher<ark_vesta::Fq, VestaInput>>::new();
         h.inner.absorb_domain(domain.as_ref());
@@ -322,6 +338,14 @@ impl From<ark_bn254::G1Affine> for BN254Input {
     }
 }
 
+impl BN254Hasher {
+    pub fn new() -> Self {
+        <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new()
+    }
+    pub fn new_with_config(config: PackingConfig) -> Self {
+        <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new_with_config(config)
+    }
+}
 impl BN254Hasher {
     pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
         let mut h = <Self as PoseidonHasher<ark_bn254::Fq, BN254Input>>::new();
@@ -397,6 +421,14 @@ impl From<ark_bls12_381::G1Affine> for BLS12_381Input {
 }
 
 impl BLS12_381Hasher {
+    pub fn new() -> Self {
+        <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new()
+    }
+    pub fn new_with_config(config: PackingConfig) -> Self {
+        <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new_with_config(config)
+    }
+}
+impl BLS12_381Hasher {
     pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
         let mut h = <Self as PoseidonHasher<ark_bls12_381::Fq, BLS12_381Input>>::new();
         h.inner.absorb_domain(domain.as_ref());
@@ -467,6 +499,15 @@ impl From<ark_bls12_377::Fr> for BLS12_377Input {
 impl From<ark_bls12_377::G1Affine> for BLS12_377Input {
     fn from(value: ark_bls12_377::G1Affine) -> Self {
         Self::CurvePoint(value)
+    }
+}
+
+impl BLS12_377Hasher {
+    pub fn new() -> Self {
+        <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new()
+    }
+    pub fn new_with_config(config: PackingConfig) -> Self {
+        <Self as PoseidonHasher<ark_bls12_377::Fq, BLS12_377Input>>::new_with_config(config)
     }
 }
 

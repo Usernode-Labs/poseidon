@@ -19,6 +19,7 @@ comprehensive error handling and support for multiple elliptic curves.
 
 ```rust
 use poseidon_hash::PallasHasher;
+use poseidon_hash::PoseidonHasher;
 use ark_ec::AffineRepr;
 
 // Create hasher with embedded parameters
@@ -39,6 +40,7 @@ println!("Hash: {}", hash);
 
 ```rust
 use poseidon_hash::PallasHasher;
+use poseidon_hash::PoseidonHasher;
 
 let mut hasher = PallasHasher::new();
 hasher.update(ark_pallas::Fq::from(42u64));
@@ -53,6 +55,7 @@ Each curve hasher embeds its own parameters and field types:
 
 ```rust
 use poseidon_hash::{PallasHasher, BN254Hasher};
+use poseidon_hash::PoseidonHasher;
 
 let mut pallas_hasher = PallasHasher::new();  // Pallas parameters
 let mut bn254_hasher = BN254Hasher::new();    // BN254 parameters
@@ -87,6 +90,7 @@ pub mod parameters;
 pub mod primitive;
 pub mod types;
 mod tags;
+mod ark_poseidon;
 
 
 #[cfg(test)]

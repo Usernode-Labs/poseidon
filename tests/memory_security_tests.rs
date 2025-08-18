@@ -2,7 +2,8 @@
 //! 
 //! These tests verify that ZeroizeOnDrop implementation correctly clears sensitive data.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 use std::ptr;
 
 /// Verifies that zeroization is implemented and working correctly.

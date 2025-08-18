@@ -1,6 +1,7 @@
 //! Multi-curve example demonstrating usage with different elliptic curves.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 
 fn main() {
     // Same data, different curves

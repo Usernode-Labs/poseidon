@@ -1,7 +1,8 @@
 //! Tests to ensure domain/type tags prevent cross-type collisions.
 
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, BigInteger};
 use poseidon_hash::types::PallasHasher;
+use poseidon_hash::PoseidonHasher;
 
 #[test]
 fn test_basefield_vs_identical_bytes() {
@@ -79,4 +80,3 @@ fn test_curve_infinity_vs_two_zero_basefield() {
 
     assert_ne!(hash1, hash2, "Tags should disambiguate infinity from two zero Fq elements");
 }
-

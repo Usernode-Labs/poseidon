@@ -1,6 +1,7 @@
 //! Comprehensive tests for the primitive types hashing functionality.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 use ark_ff::Zero;
 
 #[test]

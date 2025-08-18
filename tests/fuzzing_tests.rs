@@ -3,7 +3,8 @@
 //! These tests use various fuzzing techniques to find edge cases and
 //! potential vulnerabilities with malformed or unexpected inputs.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 use ark_ff::PrimeField;
 
 /// Tests that the hasher handles random byte sequences without panicking.

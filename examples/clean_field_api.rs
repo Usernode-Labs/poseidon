@@ -1,6 +1,7 @@
 //! Example demonstrating the clean field element API across all curves.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 use ark_ec::AffineRepr;
 
 fn main() {

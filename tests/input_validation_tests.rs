@@ -3,7 +3,8 @@
 //! These tests verify that the library properly validates inputs and protects
 //! against denial-of-service attacks through resource exhaustion.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 use std::time::{Duration, Instant};
 
 // Removed test_string_length_limits - no longer relevant with non-result API

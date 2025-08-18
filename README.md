@@ -1,17 +1,15 @@
 # Poseidon Hash Library
 
-A production-ready, type-safe Rust implementation of the Poseidon hash function with comprehensive error handling and support for multiple elliptic curves.
+Type-safe, multi-curve Poseidon hash with domain/type separation and an arkworks Poseidon sponge backend.
 
 ## Features
 
-- **Type-safe curve-specific hashers** - Embedded parameters prevent parameter mix-ups at compile time
-- **Multi-field input support** - Hash base field (Fq), scalar field (Fr), and curve point elements seamlessly
-- **Automatic field conversion** - Sophisticated Fr ↔ Fq conversion handling different field bit sizes safely
-- **Comprehensive error handling** - Proper error cascading with actionable error messages using `thiserror`
-- **Embedded parameters** - Zero external dependencies, parameters compiled directly into the binary
-- **Zero-copy design** - Efficient memory usage with lazy static parameters
-- **Production-ready** - Extensive testing, proper error handling, and best practices
-- **Cryptographically secure** - Official Poseidon parameters with 128-bit security level
+- Poseidon sponge (arkworks): t=3, rate=2, standard 10*1 padding
+- Domain separation: per-hasher domain strings to namespace outputs
+- Type tags: disambiguate BaseField, ScalarField, CurvePoint (finite/infinity), and primitives
+- Primitive packing: byte-efficient (default) or circuit-friendly
+- Multi-curve: Pallas, Vesta, BN254, BLS12-381, BLS12-377 (embedded parameters)
+- Secure memory handling: sensitive buffers zeroized on drop/reset
 
 ## Installation
 
@@ -25,45 +23,44 @@ poseidon-hash = "0.1"
 ## Quick Start
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher; // brings new/update/digest into scope
 use ark_ec::AffineRepr;
 
-// Create hasher with embedded parameters
-let mut hasher = PallasHasher::new();
+// Create a namespaced hasher (recommended)
+let mut hasher = PallasHasher::new_with_domain("VRF_DOMAIN");
 
-// Direct ergonomic API - no enum wrapping needed
-hasher.update(ark_pallas::Fr::from(42u64))?;        // scalar field
-hasher.update(ark_pallas::Fq::from(100u64))?;       // base field  
-hasher.update(ark_pallas::Affine::generator())?;     // curve point
-hasher.update(42u64)?;                               // primitive
-hasher.update("hello")?;                            // string
+// Update with different types (tags added automatically)
+hasher.update(ark_pallas::Fr::from(42u64));              // scalar field
+hasher.update(ark_pallas::Fq::from(100u64));             // base field
+hasher.update(ark_pallas::Affine::generator());          // curve point
+hasher.update(42u64);                                    // primitive
+hasher.update("hello");                                  // string
 
-let hash = hasher.digest()?;
+let hash = hasher.digest(); // non-consuming; finalize() consumes
 println!("Hash: {}", hash);
-# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-## Error Handling
+## Multi-Curve
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 
-let mut hasher = PallasHasher::new();
-hasher.update(ark_pallas::Fq::from(42u64))?;
+// BN254 (Ethereum)
+let mut bn254_hasher = BN254Hasher::new_with_domain("BLOCK_HASH_DOMAIN");
+bn254_hasher.update(ark_bn254::Fr::from(42u64));
+let bn254_hash = bn254_hasher.digest();
 
-match hasher.digest() {
-    Ok(hash) => println!("Success: {}", hash),
-    Err(HasherError::PoseidonError(poseidon_err)) => {
-        eprintln!("Detailed Poseidon error: {}", poseidon_err);
-    },
-    Err(HasherError::PointConversionFailed) => {
-        eprintln!("Failed to extract curve point coordinates");
-    },
-    Err(HasherError::NumericConversionFailed { reason }) => {
-        eprintln!("Numeric conversion failed: {}", reason);
-    }
-}
-# Ok::<(), Box<dyn std::error::Error>>(())
+// BLS12-381 (Ethereum 2.0)
+let mut bls_hasher = BLS12_381Hasher::new_with_domain("BLOCK_HASH_DOMAIN");
+bls_hasher.update(ark_bls12_381::Fr::from(42u64));
+let bls_hash = bls_hasher.digest();
+
+// Vesta (Mina)
+let mut vesta_hasher = VestaHasher::new_with_domain("BLOCK_HASH_DOMAIN");
+vesta_hasher.update(ark_vesta::Fq::from(123u64));
+let vesta_hash = vesta_hasher.digest();
 ```
 
 ## Type Safety
@@ -71,7 +68,7 @@ match hasher.digest() {
 Each curve hasher embeds its own parameters and field types:
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::PallasHasher;
 
 let mut pallas_hasher = PallasHasher::new();  // Pallas parameters
 let mut bn254_hasher = BN254Hasher::new();    // BN254 parameters
@@ -98,23 +95,22 @@ bn254_hasher.update(ark_bn254::Fr::from(123u64))?;    // ✓ BN254 scalar
 ## Multi-Curve Support
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::{BN254Hasher, BLS12_381Hasher, VestaHasher};
 
 // BN254 (Ethereum)
 let mut bn254_hasher = BN254Hasher::new();
-bn254_hasher.update(ark_bn254::Fr::from(42u64))?;
-let bn254_hash = bn254_hasher.digest()?;
+bn254_hasher.update(ark_bn254::Fr::from(42u64));
+let bn254_hash = bn254_hasher.digest();
 
 // BLS12-381 (Ethereum 2.0)  
 let mut bls_hasher = BLS12_381Hasher::new();
-bls_hasher.update(ark_bls12_381::Fr::from(42u64))?;
-let bls_hash = bls_hasher.digest()?;
+bls_hasher.update(ark_bls12_381::Fr::from(42u64));
+let bls_hash = bls_hasher.digest();
 
 // Vesta (Mina Protocol)
 let mut vesta_hasher = VestaHasher::new();
-vesta_hasher.update(ark_vesta::Fq::from(123u64))?;
-let vesta_hash = vesta_hasher.digest()?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+vesta_hasher.update(ark_vesta::Fq::from(123u64));
+let vesta_hash = vesta_hasher.digest();
 ```
 
 ## Primitive Type Support
@@ -122,26 +118,26 @@ let vesta_hash = vesta_hasher.digest()?;
 Hash basic Rust types directly:
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 
 let mut hasher = PallasHasher::new();
 
 // Integers
-hasher.update(42u64)?;
-hasher.update(-123i32)?;
-hasher.update(0xDEADBEEFu32)?;
+hasher.update(42u64);
+hasher.update(-123i32);
+hasher.update(0xDEADBEEFu32);
 
 // Booleans and strings
-hasher.update(true)?;
-hasher.update("hello world")?;
-hasher.update("test".to_string())?;
+hasher.update(true);
+hasher.update("hello world");
+hasher.update("test".to_string());
 
 // Byte arrays
-hasher.update(vec![1u8, 2, 3, 4])?;
-hasher.update(&[5u8, 6, 7, 8][..])?;
+hasher.update(vec![1u8, 2, 3, 4]);
+hasher.update(&[5u8, 6, 7, 8][..]);
 
-let hash = hasher.digest()?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+let hash = hasher.digest();
 ```
 
 
@@ -154,9 +150,6 @@ cargo run --example basic_usage
 # Multi-curve demonstration  
 cargo run --example multi_curve
 
-# Error handling demonstration
-cargo run --example error_demo
-
 # Primitive type support
 cargo run --example primitive_types
 ```
@@ -166,7 +159,7 @@ cargo run --example primitive_types
 Configure how primitive types are packed into field elements:
 
 ```rust
-use poseidon_hash::prelude::*;
+use poseidon_hash::PallasHasher;
 
 // Byte-efficient (default) - pack multiple values per field element
 let mut hasher = PallasHasher::new_with_config(PackingConfig::default());
@@ -207,26 +200,22 @@ cargo test security_tests
 - **Type-safe hashers**: `PallasHasher`, `BN254Hasher`, etc. with embedded parameters
 - **Generic core**: `MultiFieldHasher<F, S, G>` for advanced use cases  
 - **Unified input**: Single `update()` method handles all input types
-- **Proper chaining**: All inputs affect the final hash result
+- **Sponge mode**: Standard absorb/squeeze with Poseidon permutation
 - **Zero-copy**: Efficient memory usage with lazy static parameters
 
 ### Field Conversion
 
 The library automatically handles different field size relationships:
 
-1. **Same bit size**: Simple byte representation change
-2. **Fr < Fq**: Direct conversion without data loss  
-3. **Fr > Fq**: Automatic chunking into multiple field elements
+1. **Same or smaller bit size**: Bytes embed directly into Fq (tagged)
+2. **Fr >= Fq** (future): Decompose into limbs less than Fq and absorb with tags
 
 ## Error Types
 
-### `HasherError`
+### Error Types
 
-- **`PoseidonError`** - Cascades errors from the underlying Poseidon implementation
-- **`PointConversionFailed`** - Failed to extract coordinates from curve point
-- **`NumericConversionFailed { reason }`** - Safe numeric conversion failed
-
-All errors provide actionable messages to help debugging.
+- `PointConversionFailed` – Failed to extract curve point coordinates
+- `NumericConversionFailed { reason }` – Numeric conversion failed
 
 ## License
 

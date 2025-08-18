@@ -22,6 +22,7 @@
 //! ```rust
 //! use poseidon_hash::primitive::{RustInput, PackingMode};
 //! use poseidon_hash::PallasHasher;
+//! use poseidon_hash::PoseidonHasher;
 //!
 //! let mut hasher = PallasHasher::new();
 //!
@@ -153,6 +154,7 @@ impl From<&[u8]> for RustInput { fn from(v: &[u8]) -> Self { Self::ByteSlice(v.t
 /// 
 /// This buffer may contain sensitive input data and implements `ZeroizeOnDrop`
 /// to ensure that cryptographic material is securely cleared from memory.
+#[derive(Clone)]
 pub struct PackingBuffer {
     /// Accumulated bytes waiting to be packed
     /// 

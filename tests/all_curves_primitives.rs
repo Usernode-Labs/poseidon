@@ -1,6 +1,7 @@
 //! Test that all curve implementations support primitive types correctly.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 use ark_ff::Zero;
 
 #[test]

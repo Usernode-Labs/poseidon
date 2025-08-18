@@ -2,7 +2,8 @@
 //! 
 //! These tests verify security properties and may identify vulnerabilities.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 use std::collections::HashSet;
 use ark_ff::PrimeField;
 

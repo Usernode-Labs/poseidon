@@ -24,30 +24,35 @@ import re
 CURVES = [
     {
         'name': 'pallas',
+        'field_bits': 255,
         'prime': '0x40000000000000000000000000000000224698fc094cf91b992d30ed00000001',
         'field_type': 'Fq',
         'description': 'Pallas curve (used in Mina Protocol)'
     },
     {
         'name': 'vesta',
+        'field_bits': 255,
         'prime': '0x40000000000000000000000000000000224698fc0994a8dd8c46eb2100000001',
         'field_type': 'Fq',
         'description': 'Vesta curve (forms cycle with Pallas)'
     },
     {
         'name': 'bn254',
+        'field_bits': 254,
         'prime': '0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47',
         'field_type': 'Fq',
         'description': 'BN254 curve (Ethereum, zkSNARKs)'
     },
     {
         'name': 'bls12_381',
+        'field_bits': 381,
         'prime': '0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab',
         'field_type': 'Fq',
         'description': 'BLS12-381 curve (Ethereum 2.0, Zcash)'
     },
     {
         'name': 'bls12_377',
+        'field_bits': 377,
         'prime': '0x1ae3a4617c510eac63b05c06ca1493b1a22d9f300f5138f1ef3622fba094800170b5d44300000008508c00000000001',
         'field_type': 'Fq',
         'description': 'BLS12-377 curve (Celo, recursive proofs)'
@@ -60,50 +65,26 @@ ALPHA = 5  # S-box exponent
 M = 128  # Security level in bits
 
 
-def run_sage_in_docker(prime, output_file):
-    """Run the SageMath script in Docker to generate parameters."""
-    
-    # Create a temporary script that includes the prime
-    sage_script = f"""
-# Set the prime for parameter generation
-prime = {prime}
-p = prime
+def run_sage_in_docker(field_bits, prime_hex):
+    """Run the SageMath script in Docker to generate parameters by invoking it with args."""
+    # Arguments: FIELD(1=GF(p)) SBOX(0=x^alpha) FIELD_SIZE NUM_CELLS ALPHA SECURITY_LEVEL MODULUS
+    args = [
+        '1', str(0), str(field_bits), str(T), str(ALPHA), str(M), prime_hex
+    ]
+    cmd = [
+        'docker', 'run', '--rm',
+        '-v', f'{os.getcwd()}:/home/sage/work',
+        'sagemath/sagemath:latest',
+        'sage', '/home/sage/work/scripts/generate_params_poseidon.sage',
+        *args
+    ]
 
-# Standard parameters
-t = {T}
-alpha = {ALPHA}
-M = {M}
-
-# Run the parameter generation script
-load('/home/sage/work/scripts/generate_params_poseidon.sage')
-"""
-    
-    # Write temporary script
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.sage', delete=False) as f:
-        temp_script = f.name
-        f.write(sage_script)
-    
-    try:
-        # Run in Docker
-        cmd = [
-            'docker', 'run', '--rm',
-            '-v', f'{os.getcwd()}:/home/sage/work',
-            '-v', f'{temp_script}:/home/sage/run_params.sage',
-            'sagemath/sagemath:latest',
-            'sage', '/home/sage/run_params.sage'
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            print(f"SageMath error: {result.stderr}")
-            return None
-            
-        return parse_sage_output(result.stdout)
-        
-    finally:
-        # Clean up temp file
-        os.unlink(temp_script)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"SageMath error: {result.stderr}")
+        return None
+    # The script prints to stdout; parse it
+    return parse_sage_output(result.stdout)
 
 
 def parse_sage_output(output):
@@ -120,11 +101,11 @@ def parse_sage_output(output):
     
     # Extract rounds
     for line in lines:
-        if 'R_F=' in line:
+        if 'R_F=' in line or 'Params:' in line:
             match = re.search(r'R_F=(\d+)', line)
             if match:
                 params['full_rounds'] = int(match.group(1))
-        if 'R_P=' in line:
+        if 'R_P=' in line or 'Params:' in line:
             match = re.search(r'R_P=(\d+)', line)
             if match:
                 params['partial_rounds'] = int(match.group(1))
@@ -147,7 +128,7 @@ def parse_sage_output(output):
     in_mds = False
     mds_lines = []
     for line in lines:
-        if 'MDS matrix:' in line:
+        if 'MDS matrix' in line:
             in_mds = True
             continue
         if in_mds:
@@ -157,7 +138,7 @@ def parse_sage_output(output):
                     # Parse complete MDS matrix
                     matrix_str = ''.join(mds_lines)
                     # Extract rows
-                    rows = re.findall(r'\[((?:\'0x[0-9a-fA-F]+\'(?:,\s*)?)+)\]', matrix_str)
+                    rows = re.findall(r"\[((?:'0x[0-9a-fA-F]+'(?:,\s*)?)+)\]", matrix_str)
                     for row in rows:
                         hex_values = re.findall(r"'(0x[0-9a-fA-F]+)'", row)
                         params['mds_matrix'].append(hex_values)
@@ -200,7 +181,7 @@ def generate_rust_file(curve_config, params=None):
 //!
 //! {curve_config['description']}
 
-use light_poseidon::PoseidonParameters;
+use crate::ark_poseidon::ArkPoseidonConfig;
 use lazy_static::lazy_static;
 
 /// Number of full rounds
@@ -236,7 +217,7 @@ const ROUND_CONSTANTS: [&str; {len(params['round_constants'])}] = [
     # Add lazy static for parameters
     rust_code += f'''lazy_static! {{
     /// Poseidon parameters for {curve_name} {field_type} field (auto-generated)
-    pub static ref {curve_name.upper()}_PARAMS: PoseidonParameters<ark_{curve_name}::{field_type}> = {{
+    pub static ref {curve_name.upper()}_PARAMS: ArkPoseidonConfig<ark_{curve_name}::{field_type}> = {{
         use num_bigint::BigUint;
         
         // Parse round constants
@@ -261,14 +242,12 @@ const ROUND_CONSTANTS: [&str; {len(params['round_constants'])}] = [
             mds.push(mds_row);
         }}
         
-        PoseidonParameters {{
+        crate::parameters::create_parameters(
             ark,
             mds,
-            full_rounds: FULL_ROUNDS,
-            partial_rounds: PARTIAL_ROUNDS,
-            width: {T},
-            alpha: {ALPHA},
-        }}
+            FULL_ROUNDS,
+            PARTIAL_ROUNDS,
+        )
     }};
 }}
 
@@ -282,7 +261,7 @@ mod tests {{
         let params = &*{curve_name.upper()}_PARAMS;
         assert_eq!(params.full_rounds, FULL_ROUNDS);
         assert_eq!(params.partial_rounds, PARTIAL_ROUNDS);
-        assert_eq!(params.width, {T});
+        assert_eq!(params.rate + params.capacity, {T});
         assert_eq!(params.alpha, {ALPHA});
     }}
 }}
@@ -332,11 +311,11 @@ def main():
     # Generate parameters for each curve
     for curve in CURVES:
         print(f"Processing {curve['name'].upper()}...")
-        
+
         params = None
         if use_docker:
             print(f"  Running SageMath for prime: {curve['prime'][:20]}...")
-            params = run_sage_in_docker(curve['prime'], f"params_{curve['name']}.txt")
+            params = run_sage_in_docker(curve['field_bits'], curve['prime'])
             if params:
                 print(f"  Generated: R_F={params['full_rounds']}, R_P={params['partial_rounds']}")
         

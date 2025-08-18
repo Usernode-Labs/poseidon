@@ -33,20 +33,18 @@
 //! ```
 
 use ark_ff::{PrimeField, BigInteger, Zero};
-use light_poseidon::{Poseidon, PoseidonHasher, PoseidonError};
+use ark_crypto_primitives::sponge::{CryptographicSponge, FieldBasedCryptographicSponge};
 use ark_ec::AffineRepr;
 use std::marker::PhantomData;
 use thiserror::Error;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::ZeroizeOnDrop;
 use crate::primitive::{RustInput, PackingBuffer, PackingConfig, serialize_rust_input};
 use crate::tags::*;
+use crate::ark_poseidon::ArkPoseidonSponge;
 
 /// Errors that can occur during hashing operations.
 #[derive(Error, Debug)]
 pub enum HasherError {
-    /// Failed to hash elements due to Poseidon hasher error
-    #[error("Poseidon hashing failed: {0}")]
-    PoseidonError(#[from] PoseidonError),
     /// Failed to extract coordinates from curve point
     #[error("Failed to extract curve point coordinates")]
     PointConversionFailed,
@@ -109,15 +107,15 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     /// The internal state of the Poseidon hasher may contain sensitive data, but we can't
     /// control its zeroization directly as it's from an external crate.
     #[zeroize(skip)]
-    poseidon: Poseidon<F>,
-    /// Internal state accumulating base field elements for hashing
-    /// 
-    /// This contains sensitive cryptographic data and will be zeroized on drop.
-    state: Vec<F>,
+    sponge: ArkPoseidonSponge<F>,
+    #[zeroize(skip)]
+    base_sponge: ArkPoseidonSponge<F>,
     /// Buffer for accumulating primitive types before packing into field elements
     /// 
     /// This may contain sensitive input data and will be zeroized on drop.
     primitive_buffer: PackingBuffer,
+    #[zeroize(skip)]
+    count: usize,
     /// Phantom data to track scalar field type S without storing instances
     #[zeroize(skip)]
     _phantom_s: PhantomData<S>,
@@ -126,17 +124,29 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     _phantom_g: PhantomData<G>,
 }
 
-impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFieldHasher<F, S, G> {
+impl<F, S, G> MultiFieldHasher<F, S, G>
+where
+    F: PrimeField + Zero + ark_crypto_primitives::sponge::Absorb,
+    S: PrimeField,
+    G: AffineRepr<BaseField = F>,
+{
+    fn max_bytes_per_field() -> usize {
+        let field_bits = F::MODULUS_BIT_SIZE as usize;
+        let safe_bits = field_bits.saturating_sub(8);
+        std::cmp::max(safe_bits / 8, 1)
+    }
     /// Creates a new multi-field hasher from Poseidon parameters.
     ///
     /// # Arguments
     ///
     /// * `params` - Poseidon parameters for the base field F
-    pub fn new(params: light_poseidon::PoseidonParameters<F>) -> Self {
+    pub fn new(params: crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self {
+        let sponge = ArkPoseidonSponge::new(&params);
         Self {
-            poseidon: Poseidon::new(params),
-            state: Vec::new(),
+            base_sponge: sponge.clone(),
+            sponge,
             primitive_buffer: PackingBuffer::new::<F>(PackingConfig::default()),
+            count: 0,
             _phantom_s: PhantomData,
             _phantom_g: PhantomData,
         }
@@ -149,7 +159,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// # Arguments
     ///
     /// * `params` - Reference to Poseidon parameters for the base field F
-    pub fn new_from_ref(params: &light_poseidon::PoseidonParameters<F>) -> Self 
+    pub fn new_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self 
     where
         F: Clone,
     {
@@ -162,21 +172,19 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     ///
     /// * `params` - Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
-    pub fn new_with_config(params: light_poseidon::PoseidonParameters<F>, packing_config: PackingConfig) -> Self {
+    pub fn new_with_config(params: crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self {
+        let sponge = ArkPoseidonSponge::new(&params);
         Self {
-            poseidon: Poseidon::new(params),
-            state: Vec::new(),
+            base_sponge: sponge.clone(),
+            sponge,
             primitive_buffer: PackingBuffer::new::<F>(packing_config),
+            count: 0,
             _phantom_s: PhantomData,
             _phantom_g: PhantomData,
         }
     }
 
-    /// Overrides the `hash` method to provide a more idiomatic API as we pad the input so it's always two elements.
-    /// Safe unwrap since we ensure the input is always two elements.
-    fn hash(&mut self, inputs: &[F; 2]) -> F {
-        self.poseidon.hash(inputs).expect("Poseidon hash failed - should never fail with valid number of inputs")
-    }
+    // No longer used: compression chaining replaced by Poseidon sponge
     
     /// Creates a new multi-field hasher with custom packing configuration from parameter reference.
     ///
@@ -184,7 +192,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     ///
     /// * `params` - Reference to Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
-    pub fn new_with_config_from_ref(params: &light_poseidon::PoseidonParameters<F>, packing_config: PackingConfig) -> Self 
+    pub fn new_with_config_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self 
     where
         F: Clone,
     {
@@ -194,22 +202,39 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// Absorb a domain context as a tagged byte sequence at the start of the state.
     /// This namespaces the hasher so identical inputs produce different hashes across domains.
     pub fn absorb_domain(&mut self, domain: &[u8]) {
-        // Field-level domain tag
-        self.state.push(F::from(TAG_DOMAIN_CTX as u64));
-        // Encode the domain bytes through the primitive packing path with its own type tag
-        serialize_rust_input(&RustInput::ByteSlice(domain.to_vec()), &mut self.primitive_buffer);
-        // Extract all elements for the domain and append immediately
-        let elems = self.primitive_buffer.extract_field_elements::<F>();
-        for e in elems { self.state.push(e); }
-        let remaining = self.primitive_buffer.flush_remaining::<F>();
-        for e in remaining { self.state.push(e); }
+        // Field-level domain tag absorbed into both base and live sponge
+        let tag = F::from(TAG_DOMAIN_CTX as u64);
+        let v = vec![tag];
+        self.sponge.absorb(&v);
+        self.base_sponge.absorb(&v);
+        self.count += 1;
+
+        // Fixed, config-independent domain encoding:
+        // absorb the byte length as a field element, then absorb chunks of bytes
+        let len_f = F::from(domain.len() as u64);
+        let vlen = vec![len_f];
+        self.sponge.absorb(&vlen);
+        self.base_sponge.absorb(&vlen);
+        self.count += 1;
+
+        let chunk = Self::max_bytes_per_field();
+        let mut i = 0;
+        while i < domain.len() {
+            let end = std::cmp::min(i + chunk, domain.len());
+            let fe = F::from_le_bytes_mod_order(&domain[i..end]);
+            let vv = vec![fe];
+            self.sponge.absorb(&vv);
+            self.base_sponge.absorb(&vv);
+            self.count += 1;
+            i = end;
+        }
     }
 
     /// Absorbs a base field element (Fq) directly into the hasher state.
     pub fn update_base_field(&mut self, element: F) {
-        // Tag then absorb element
-        self.state.push(F::from(TAG_BASE_FIELD as u64));
-        self.state.push(element);
+        let v = vec![F::from(TAG_BASE_FIELD as u64), element];
+        self.sponge.absorb(&v);
+        self.count += 2;
     }
 
     /// Absorbs a scalar field element (Fr) with automatic conversion to base field (Fq).
@@ -220,7 +245,9 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// * Fr > Fq: Not supported
     pub fn update_scalar_field(&mut self, element: S) {
         // Tag scalar field input
-        self.state.push(F::from(TAG_SCALAR_FIELD as u64));
+        let v = vec![F::from(TAG_SCALAR_FIELD as u64)];
+        self.sponge.absorb(&v);
+        self.count += 1;
         let fr_bits = S::MODULUS_BIT_SIZE;
         let fq_bits = F::MODULUS_BIT_SIZE;
         
@@ -228,7 +255,9 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
             // Same bit size or Fr smaller than Fq, lossless conversion
             let bytes = element.into_bigint().to_bytes_le();
             let converted = F::from_le_bytes_mod_order(&bytes);
-            self.state.push(converted);
+            let v = vec![converted];
+            self.sponge.absorb(&v);
+            self.count += 1;
         } else {
             // Fr larger than Fq - need to decompose (rare case)
             unimplemented!("We do not support curves where Fr > Fq");
@@ -238,13 +267,13 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// Absorbs a curve point by extracting and hashing its affine coordinates.
     pub fn update_curve_point(&mut self, point: G) {
         if let Some((x, y)) = point.xy() {
-            // Finite point tag then coordinates
-            self.state.push(F::from(TAG_CURVE_POINT_FINITE as u64));
-            self.state.push(x);
-            self.state.push(y);
+            let v = vec![F::from(TAG_CURVE_POINT_FINITE as u64), x, y];
+            self.sponge.absorb(&v);
+            self.count += 3;
         } else {
-            // Point at infinity - tag only
-            self.state.push(F::from(TAG_CURVE_POINT_INFINITY as u64));
+            let v = vec![F::from(TAG_CURVE_POINT_INFINITY as u64)];
+            self.sponge.absorb(&v);
+            self.count += 1;
         }
     }
 
@@ -272,63 +301,24 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
         // Serialize the input into the primitive buffer
         serialize_rust_input(&input, &mut self.primitive_buffer);
         
-        // Extract any complete field elements and add them
+        // Extract any complete field elements and absorb them
         let field_elements = self.primitive_buffer.extract_field_elements::<F>();
-        for element in field_elements {
-            self.state.push(element);
+        if !field_elements.is_empty() {
+            self.sponge.absorb(&field_elements);
+            self.count += field_elements.len();
         }
     }
     
 
-    /// Finalizes the hash computation and returns the result.
-    ///
-    /// # Chaining Algorithm
-    ///
-    /// For elements [A, B, C, D, ...], the algorithm performs:
-    /// * If odd length: pad with zero  
-    /// * First pair: H₁ = hash(A, B)
-    /// * Subsequent: H₂ = hash(H₁, C), H₃ = hash(H₂, D), ...
-    ///
-    /// This ensures that every element influences the final hash result.
-    /// 
-    /// The hasher state is preserved, allowing you to continue adding data
-    /// and compute different hashes. Use `finalize()` when you want to consume
-    /// the hasher and ensure it cannot be reused.
+    /// Finalizes via sponge: clones internal sponge, absorbs remaining primitives, squeezes one element.
     pub fn digest(&mut self) -> F {
-        // First, flush any remaining primitive data from the buffer
-        let remaining_field_elements = self.primitive_buffer.flush_remaining::<F>();
-        for element in remaining_field_elements {
-            self.state.push(element);
+        let mut sponge = self.sponge.clone();
+        let mut buf = self.primitive_buffer.clone();
+        let remaining = buf.flush_remaining::<F>();
+        if !remaining.is_empty() {
+            sponge.absorb(&remaining);
         }
-        
-        // Handle empty state
-        if self.state.is_empty() {
-            return self.hash(&[F::zero(), F::zero()]);
-        }
-        
-        // Compute hash directly from state without copying
-        if self.state.len() == 1 {
-            // Single element: pad with zero and hash
-            self.hash(&[self.state[0], F::zero()])
-        } else if self.state.len() == 2 {
-            // Two elements: hash directly
-            self.hash(&[self.state[0], self.state[1]])
-        } else {
-            // Multi-element case: chain them properly
-            let mut hash_result = self.hash(&[self.state[0], self.state[1]]);
-            
-            // Process remaining elements one by one
-            for element in self.state.clone().into_iter().skip(2) {
-                hash_result = self.hash(&[hash_result, element]);
-            }
-            
-            // Handle odd length by adding final zero if needed
-            if self.state.len() % 2 != 0 {
-                hash_result = self.hash(&[hash_result, F::zero()]);
-            }
-            
-            hash_result
-        }
+        sponge.squeeze_native_field_elements(1)[0]
     }
 
 
@@ -346,6 +336,7 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// 
     /// ```rust
     /// # use poseidon_hash::PallasHasher;
+    /// # use poseidon_hash::PoseidonHasher;
     /// # fn main() {
     /// let mut hasher = PallasHasher::new();
     /// 
@@ -357,20 +348,25 @@ impl<F: PrimeField + Zero, S: PrimeField, G: AffineRepr<BaseField = F>> MultiFie
     /// # }
     /// ```
     pub fn finalize(mut self) -> F {
-        self.digest()
+        let remaining = self.primitive_buffer.flush_remaining::<F>();
+        if !remaining.is_empty() {
+            self.sponge.absorb(&remaining);
+        }
+        self.sponge.squeeze_native_field_elements(1)[0]
     }
 
     /// Resets the hasher state without changing parameters.
     /// 
     /// This method securely clears all sensitive data from memory using zeroization.
     pub fn reset(&mut self) {
-        self.state.zeroize();
-        self.primitive_buffer.clear(); // Now uses secure zeroization internally
+        self.sponge = self.base_sponge.clone();
+        self.primitive_buffer.clear();
+        self.count = 0;
     }
 
     /// Returns the current number of elements added.
     pub fn element_count(&self) -> usize {
-        self.state.len()
+        self.count
     }
 }
 

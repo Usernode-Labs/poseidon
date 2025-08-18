@@ -1,6 +1,7 @@
 //! Basic usage example for the Poseidon hash library.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 
 fn main() {
     // Create a hasher

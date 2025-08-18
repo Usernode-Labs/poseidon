@@ -1,6 +1,7 @@
 //! Example demonstrating the new primitive types hashing functionality.
 
-use poseidon_hash::prelude::*;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 
 fn main() {
     println!("🚀 Poseidon Hash Library - Primitive Types Hashing\n");

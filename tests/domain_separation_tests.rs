@@ -1,4 +1,5 @@
 use poseidon_hash::types::PallasHasher;
+use poseidon_hash::PoseidonHasher;
 
 #[test]
 fn test_different_domains_produce_different_hashes() {
@@ -24,4 +25,3 @@ fn test_same_domain_same_inputs_equal() {
 
     assert_eq!(h1.digest(), h2.digest());
 }
-
