@@ -4,7 +4,7 @@
 
 use poseidon_hash::*;
 use poseidon_hash::PoseidonHasher;
-use std::ptr;
+// removed unused imports
 
 /// Verifies that zeroization is implemented and working correctly.
 /// Tests basic functionality of ZeroizeOnDrop trait implementation.
@@ -34,34 +34,7 @@ fn test_zeroization_implementation() {
     let _hash3 = hasher.digest();
 }
 
-/// Tests that hasher memory is cleared after drop.
-/// Performs basic memory inspection to verify sensitive data clearing.
-#[test]
-fn test_hasher_memory_cleared_after_drop() {
-    let mut memory_snapshot = vec![0u8; 1024];
-    
-    {
-        let mut hasher = PallasHasher::new();
-        
-        let sensitive_scalar = ark_pallas::Fr::from(0xDEADBEEFCAFEBABEu64);
-        hasher.update(PallasInput::ScalarField(sensitive_scalar));
-        
-        let hasher_ptr = &hasher as *const _ as *const u8;
-        unsafe {
-            ptr::copy_nonoverlapping(hasher_ptr, memory_snapshot.as_mut_ptr(), 1024);
-        }
-        
-        let _hash = hasher.digest();
-    }
-    
-    let sensitive_pattern = 0xDEADBEEFCAFEBABEu64.to_le_bytes();
-    
-    for window in memory_snapshot.windows(8) {
-        if window == sensitive_pattern {
-            panic!("Sensitive data found in memory after drop - zeroization failed");
-        }
-    }
-}
+// Removed: stack memory snapshot does not reflect heap allocations and is unreliable across builds.
 
 /// Tests that concurrent access doesn't interfere with memory cleaning.
 #[test]

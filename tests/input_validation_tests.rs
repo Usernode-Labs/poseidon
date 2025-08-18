@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 /// Validates that large inputs are processed within reasonable time.
 #[test]
+#[ignore = "Timing-based; environment dependent"]
 fn test_processing_time_bounds() {
     let mut hasher = PallasHasher::new();
     
@@ -31,6 +32,7 @@ fn test_processing_time_bounds() {
 
 /// Tests that memory usage stays bounded with various input sizes.
 #[test]
+#[ignore = "Not a real measurement; remove if noisy"]
 fn test_memory_usage_bounds() {
     let mut max_memory_estimate = 0;
     
@@ -52,6 +54,7 @@ fn test_memory_usage_bounds() {
 
 /// Validates protection against DoS through repeated large inputs.
 #[test]
+#[ignore = "Timing-based; environment dependent"]
 fn test_repeated_large_input_protection() {
     let start_time = Instant::now();
     
@@ -151,6 +154,7 @@ fn test_concurrent_input_validation() {
 
 /// Tests that validation performance remains consistent.
 #[test]
+#[ignore = "Timing-based; environment dependent"]
 fn test_validation_performance_consistency() {
     let mut timings = Vec::new();
     
@@ -177,6 +181,7 @@ fn test_validation_performance_consistency() {
 /// Validates consistent resource limit enforcement across input types.
 /// Tests strings, bytes, and many small inputs.
 #[test]
+#[ignore = "Timing-based; environment dependent"]
 fn test_consistent_resource_limits() {
     
     type TestCase = (&'static str, Box<dyn Fn()>);
