@@ -13,7 +13,6 @@ categories = ["cryptography", "algorithms"]
 name = "poseidon_hash"
 
 [dependencies]
-light-poseidon = "0.3.0"
 ark-bn254 = "0.5"
 ark-bls12-381 = "0.5"
 ark-bls12-377 = "0.5"
@@ -24,6 +23,8 @@ ark-ec = "0.5"
 num-bigint = "0.4"
 lazy_static = "1.4"
 thiserror = "1.0"
+zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
+ark-crypto-primitives = { version = "0.5", default-features = false, features = ["sponge"] }
 
 [dev-dependencies]
 
@@ -34,4 +35,7 @@ name = "basic_usage"
 name = "multi_curve"
 
 [[example]]
-name = "error_demo"
+name = "primitive_types"
+
+[[example]]
+name = "clean_field_api"

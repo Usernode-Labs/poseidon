@@ -4,180 +4,195 @@
 //! at compile time, ensuring type safety and eliminating the possibility
 //! of using incorrect parameters.
 
-use crate::hasher::{MultiFieldHasher, FieldInput, HasherResult};
+use crate::hasher::{MultiFieldHasher, FieldInput};
 use crate::parameters::*;
+use crate::primitive::PackingConfig;
+use ark_ff::PrimeField;
+use zeroize::ZeroizeOnDrop;
 
-// Pallas curve hasher
-/// Pallas curve multi-field hasher with embedded parameters.
-/// Pallas is a 255-bit curve used in the Mina Protocol for recursive SNARKs.
-pub struct PallasHasher {
-    inner: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>,
+/// Trait for curve-specific Poseidon hashers with primitive type support.
+/// 
+/// This trait ensures a consistent interface across all curve implementations
+/// while maintaining type safety and embedding curve-specific parameters.
+#[allow(private_interfaces)] // InnerHasher is intentionally private - it's an implementation detail
+pub trait PoseidonHasher<F, I> 
+where 
+    F: PrimeField,
+{
+    /// Create a new hasher with default (byte-efficient) packing configuration.
+    fn new() -> Self;
+    
+    /// Create a new hasher with custom packing configuration.
+    fn new_with_config(config: PackingConfig) -> Self;
+    
+    /// Get a mutable reference to the inner MultiFieldHasher for delegation.
+    /// This is an implementation detail and should not be used directly.
+    /// Only trait implementations should provide this method.
+    #[doc(hidden)]
+    fn inner_mut(&mut self) -> &mut dyn InnerHasher<F, I>;
+    
+    /// Get an immutable reference to the inner MultiFieldHasher for delegation.
+    /// This is an implementation detail and should not be used directly.
+    /// Only trait implementations should provide this method.
+    #[doc(hidden)]
+    fn inner_ref(&self) -> &dyn InnerHasher<F, I>;
+    
+    /// Update the hasher with any compatible input.
+    /// 
+    /// This accepts field elements, curve points, primitives, or any type with a From implementation.
+    fn update<T: Into<I>>(&mut self, input: T) {
+        self.inner_mut().update_field_input(input.into())
+    }
+    
+    
+    /// Get the current hash result while preserving the hasher state.
+    fn digest(&mut self) -> F {
+        self.inner_mut().digest_result()
+    }
+    
+    
+    /// Consume the hasher and return the final hash result.
+    /// Equivalent to `digest()` but takes ownership, ensuring the hasher cannot be reused.
+    fn finalize(mut self) -> F where Self: Sized {
+        self.digest()
+    }
+    
+    /// Reset the hasher state without changing parameters.
+    /// This method securely clears all sensitive data from memory.
+    fn reset(&mut self) {
+        self.inner_mut().reset_hasher()
+    }
+    
+    /// Returns the current number of elements added.
+    fn element_count(&self) -> usize {
+        self.inner_ref().get_element_count()
+    }
 }
 
-impl PallasHasher {
-    /// Create a new Pallas hasher with embedded parameters.
-    pub fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*pallas::PALLAS_PARAMS),
+/// Internal trait to abstract over the MultiFieldHasher operations.
+/// This allows us to provide default implementations in PoseidonHasher.
+pub trait InnerHasher<F, I>
+where
+    F: PrimeField,
+{
+    /// Update the hasher with a field input
+    fn update_field_input(&mut self, input: I);
+    /// Compute the hash digest
+    fn digest_result(&mut self) -> F;
+    /// Reset the hasher state
+    fn reset_hasher(&mut self);
+    /// Get the current element count
+    fn get_element_count(&self) -> usize;
+}
+
+// Implement InnerHasher for MultiFieldHasher to enable delegation
+impl<F, S, G> InnerHasher<F, FieldInput<F, S, G>> for MultiFieldHasher<F, S, G>
+where
+    F: PrimeField + ark_ff::Zero + ark_crypto_primitives::sponge::Absorb,
+    S: PrimeField,
+    G: ark_ec::AffineRepr<BaseField = F>,
+{
+    fn update_field_input(&mut self, input: FieldInput<F, S, G>) {
+        self.update(input)
+    }
+    
+    
+    fn digest_result(&mut self) -> F {
+        self.digest()
+    }
+    
+    fn reset_hasher(&mut self) {
+        self.reset()
+    }
+    
+    fn get_element_count(&self) -> usize {
+        self.element_count()
+    }
+}
+
+// Macro to define curve-specific hasher types and impls
+macro_rules! define_curve_hasher {
+    (
+        $Hasher:ident, $Input:ident,
+        fq = $fq:path,
+        fr = $fr:path,
+        affine = $aff:path,
+        params = $params:path
+    ) => {
+        #[derive(ZeroizeOnDrop)]
+        pub struct $Hasher {
+            inner: MultiFieldHasher<$fq, $fr, $aff>,
         }
-    }
-    
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: PallasInput) -> HasherResult<()> {
-        self.inner.absorb(input)
-    }
-    
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_pallas::Fq> {
-        self.inner.squeeze()
-    }
-}
 
-impl Default for PallasHasher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+        impl PoseidonHasher<$fq, $Input> for $Hasher {
+            fn new() -> Self {
+                Self { inner: MultiFieldHasher::new_from_ref(&$params) }
+            }
 
-/// Type alias for Pallas curve field input enum.
-pub type PallasInput = FieldInput<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>;
+            fn new_with_config(config: PackingConfig) -> Self {
+                Self { inner: MultiFieldHasher::new_with_config_from_ref(&$params, config) }
+            }
 
-// Vesta curve hasher
-/// Vesta curve multi-field hasher with embedded parameters.
-/// Vesta forms a cycle with Pallas for efficient recursive proofs.
-pub struct VestaHasher {
-    inner: MultiFieldHasher<ark_vesta::Fq, ark_vesta::Fr, ark_vesta::Affine>,
-}
-
-impl VestaHasher {
-    /// Create a new Vesta hasher with embedded parameters.
-    pub fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*vesta::VESTA_PARAMS),
+            fn inner_mut(&mut self) -> &mut dyn InnerHasher<$fq, $Input> { &mut self.inner }
+            fn inner_ref(&self) -> &dyn InnerHasher<$fq, $Input> { &self.inner }
         }
-    }
-    
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: VestaInput) -> HasherResult<()> {
-        self.inner.absorb(input)
-    }
-    
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_vesta::Fq> {
-        self.inner.squeeze()
-    }
-}
 
-impl Default for VestaHasher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+        impl Default for $Hasher { fn default() -> Self { <Self as PoseidonHasher<$fq, $Input>>::new() } }
 
-/// Type alias for Vesta curve field input enum.
-pub type VestaInput = FieldInput<ark_vesta::Fq, ark_vesta::Fr, ark_vesta::Affine>;
+        pub type $Input = FieldInput<$fq, $fr, $aff>;
+        impl From<$fq> for $Input { fn from(v: $fq) -> Self { Self::BaseField(v) } }
+        impl From<$fr> for $Input { fn from(v: $fr) -> Self { Self::ScalarField(v) } }
+        impl From<$aff> for $Input { fn from(v: $aff) -> Self { Self::CurvePoint(v) } }
 
-// BN254 curve hasher
-/// BN254 curve multi-field hasher with embedded parameters.
-/// BN254 is widely used in Ethereum and zkSNARK applications.
-pub struct BN254Hasher {
-    inner: MultiFieldHasher<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>,
-}
-
-impl BN254Hasher {
-    /// Create a new BN254 hasher with embedded parameters.
-    pub fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*bn254::BN254_PARAMS),
+        impl $Hasher {
+            pub fn new() -> Self { <Self as PoseidonHasher<$fq, $Input>>::new() }
+            pub fn new_with_config(config: PackingConfig) -> Self { <Self as PoseidonHasher<$fq, $Input>>::new_with_config(config) }
+            pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+                let mut h = <Self as PoseidonHasher<$fq, $Input>>::new(); h.inner.absorb_domain(domain.as_ref()); h
+            }
+            pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+                let mut h = <Self as PoseidonHasher<$fq, $Input>>::new_with_config(config); h.inner.absorb_domain(domain.as_ref()); h
+            }
         }
-    }
-    
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BN254Input) -> HasherResult<()> {
-        self.inner.absorb(input)
-    }
-    
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_bn254::Fq> {
-        self.inner.squeeze()
-    }
+    };
 }
 
-impl Default for BN254Hasher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+define_curve_hasher!(
+    PallasHasher, PallasInput,
+    fq = ark_pallas::Fq,
+    fr = ark_pallas::Fr,
+    affine = ark_pallas::Affine,
+    params = pallas::PALLAS_PARAMS
+);
 
-/// Type alias for BN254 curve field input enum.
-pub type BN254Input = FieldInput<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>;
+define_curve_hasher!(
+    VestaHasher, VestaInput,
+    fq = ark_vesta::Fq,
+    fr = ark_vesta::Fr,
+    affine = ark_vesta::Affine,
+    params = vesta::VESTA_PARAMS
+);
 
-// BLS12-381 curve hasher
-/// BLS12-381 curve multi-field hasher with embedded parameters.
-/// BLS12-381 is used in Ethereum 2.0 and Zcash.
-pub struct BLS12_381Hasher {
-    inner: MultiFieldHasher<ark_bls12_381::Fq, ark_bls12_381::Fr, ark_bls12_381::G1Affine>,
-}
+define_curve_hasher!(
+    BN254Hasher, BN254Input,
+    fq = ark_bn254::Fq,
+    fr = ark_bn254::Fr,
+    affine = ark_bn254::G1Affine,
+    params = bn254::BN254_PARAMS
+);
 
-impl BLS12_381Hasher {
-    /// Create a new BLS12-381 hasher with embedded parameters.
-    pub fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*bls12_381::BLS12_381_PARAMS),
-        }
-    }
-    
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BLS12_381Input) -> HasherResult<()> {
-        self.inner.absorb(input)
-    }
-    
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_bls12_381::Fq> {
-        self.inner.squeeze()
-    }
-}
+define_curve_hasher!(
+    BLS12_381Hasher, BLS12_381Input,
+    fq = ark_bls12_381::Fq,
+    fr = ark_bls12_381::Fr,
+    affine = ark_bls12_381::G1Affine,
+    params = bls12_381::BLS12_381_PARAMS
+);
 
-impl Default for BLS12_381Hasher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Type alias for BLS12-381 curve field input enum.
-pub type BLS12_381Input = FieldInput<ark_bls12_381::Fq, ark_bls12_381::Fr, ark_bls12_381::G1Affine>;
-
-// BLS12-377 curve hasher
-/// BLS12-377 curve multi-field hasher with embedded parameters.
-/// BLS12-377 is used in Celo and forms cycles with BW6-761.
-pub struct BLS12_377Hasher {
-    inner: MultiFieldHasher<ark_bls12_377::Fq, ark_bls12_377::Fr, ark_bls12_377::G1Affine>,
-}
-
-impl BLS12_377Hasher {
-    /// Create a new BLS12-377 hasher with embedded parameters.
-    pub fn new() -> Self {
-        Self {
-            inner: MultiFieldHasher::new_from_ref(&*bls12_377::BLS12_377_PARAMS),
-        }
-    }
-    
-    /// Update the hasher with a field input.
-    pub fn update(&mut self, input: BLS12_377Input) -> HasherResult<()> {
-        self.inner.absorb(input)
-    }
-    
-    /// Squeeze the current hash result and reset the hasher.
-    pub fn squeeze(&mut self) -> HasherResult<ark_bls12_377::Fq> {
-        self.inner.squeeze()
-    }
-}
-
-impl Default for BLS12_377Hasher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Type alias for BLS12-377 curve field input enum.
-pub type BLS12_377Input = FieldInput<ark_bls12_377::Fq, ark_bls12_377::Fr, ark_bls12_377::G1Affine>;
+define_curve_hasher!(
+    BLS12_377Hasher, BLS12_377Input,
+    fq = ark_bls12_377::Fq,
+    fr = ark_bls12_377::Fr,
+    affine = ark_bls12_377::G1Affine,
+    params = bls12_377::BLS12_377_PARAMS
+);

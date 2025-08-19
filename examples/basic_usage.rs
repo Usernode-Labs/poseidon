@@ -1,53 +1,23 @@
 //! Basic usage example for the Poseidon hash library.
 
-use poseidon_hash::prelude::*;
-use ark_ec::AffineRepr;
+use poseidon_hash::*;
+use poseidon_hash::PoseidonHasher;
 
 fn main() {
-    println!("🎯 Poseidon Hash Library - Basic Usage\n");
-    
-    // Create a hasher for the Pallas curve
+    // Create a hasher
     let mut hasher = PallasHasher::new();
     
-    // Create some test data
-    let scalar1 = ark_pallas::Fr::from(12345u64);
-    let scalar2 = ark_pallas::Fr::from(67890u64);
-    let base_element = ark_pallas::Fq::from(11111u64);
+    // Hash field elements - clean direct API!
+    hasher.update(ark_pallas::Fr::from(42u64));
+    hasher.update(ark_pallas::Fq::from(100u64));
     
-    // Generate a curve point
-    let generator = ark_pallas::Affine::generator();
-    let point = generator;
+    let hash = hasher.digest();
+    println!("Hash: {}", hash);
     
-    println!("📝 Absorbing different field types:");
+    // Hash primitive types  
+    hasher.update(123u64);
+    hasher.update("hello");
     
-    // Update with scalar field elements
-    hasher.update(PallasInput::ScalarField(scalar1)).expect("Failed to update hasher");
-    println!("  • Updated with scalar field element: {scalar1}");
-    
-    hasher.update(PallasInput::ScalarField(scalar2)).expect("Failed to update hasher");
-    println!("  • Updated with scalar field element: {scalar2}");
-    
-    // Update with base field element
-    hasher.update(PallasInput::BaseField(base_element)).expect("Failed to update hasher");
-    println!("  • Updated with base field element: {base_element}");
-    
-    // Update with curve point
-    hasher.update(PallasInput::CurvePoint(point)).expect("Failed to update hasher");
-    println!("  • Absorbed curve point (generator)");
-    
-    // Compute the hash
-    let hash = hasher.squeeze().expect("Failed to compute hash");
-    println!("\n🔥 Final hash: {hash}");
-    
-    // Demonstrate reusing the hasher
-    println!("\n♻️  Reusing the hasher:");
-    hasher.update(PallasInput::ScalarField(scalar1)).expect("Failed to update hasher");
-    hasher.update(PallasInput::ScalarField(scalar2)).expect("Failed to update hasher");
-    let hash2 = hasher.squeeze().expect("Failed to compute hash");
-    println!("  • Hash of just two scalars: {hash2}");
-    
-    // Verify hashes are different
-    if hash != hash2 {
-        println!("\n✅ Success: Different inputs produce different hashes!");
-    }
+    let hash2 = hasher.digest();
+    println!("Primitive hash: {}", hash2);
 }

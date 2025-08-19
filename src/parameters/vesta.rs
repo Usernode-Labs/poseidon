@@ -8,7 +8,7 @@
 //!
 //! Vesta curve (forms cycle with Pallas)
 
-use light_poseidon::PoseidonParameters;
+use crate::ark_poseidon::ArkPoseidonConfig;
 use lazy_static::lazy_static;
 
 /// Number of full rounds
@@ -222,7 +222,7 @@ const MDS_MATRIX: [[&str; 3]; 3] = [
 
 lazy_static! {
     /// Poseidon parameters for vesta Fq field (auto-generated)
-    pub static ref VESTA_PARAMS: PoseidonParameters<ark_vesta::Fq> = {
+    pub static ref VESTA_PARAMS: ArkPoseidonConfig<ark_vesta::Fq> = {
         use num_bigint::BigUint;
         
         // Parse round constants
@@ -247,14 +247,12 @@ lazy_static! {
             mds.push(mds_row);
         }
         
-        PoseidonParameters {
+        crate::parameters::create_parameters(
             ark,
             mds,
-            full_rounds: FULL_ROUNDS,
-            partial_rounds: PARTIAL_ROUNDS,
-            width: 3,
-            alpha: 5,
-        }
+            FULL_ROUNDS,
+            PARTIAL_ROUNDS,
+        )
     };
 }
 
@@ -268,7 +266,7 @@ mod tests {
         let params = &*VESTA_PARAMS;
         assert_eq!(params.full_rounds, FULL_ROUNDS);
         assert_eq!(params.partial_rounds, PARTIAL_ROUNDS);
-        assert_eq!(params.width, 3);
+        assert_eq!(params.rate + params.capacity, 3);
         assert_eq!(params.alpha, 5);
     }
 }
