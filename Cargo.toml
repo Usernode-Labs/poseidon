@@ -13,18 +13,25 @@ categories = ["cryptography", "algorithms"]
 name = "poseidon_hash"
 
 [dependencies]
-ark-bn254 = "0.5"
-ark-bls12-381 = "0.5"
-ark-bls12-377 = "0.5"
-ark-pallas = "0.5"
-ark-vesta = "0.5"
-ark-ff = "0.5"
-ark-ec = "0.5"
+# ark core
+ark-ff  = { version = "0.5", features = ["asm", "parallel"] }
+ark-ec  = { version = "0.5", features = ["parallel"] }
+
+# curves (TODO: make them optional)
+ark-bn254     = { version = "0.5" }
+ark-bls12-381 = { version = "0.5" }
+ark-bls12-377 = { version = "0.5" }
+ark-pallas    = { version = "0.5" }
+ark-vesta     = { version = "0.5" }
+
+# sponge
+ark-crypto-primitives = { version = "0.5", features = ["sponge", "parallel"] }
+
+# misc
 num-bigint = "0.4"
 lazy_static = "1.4"
 thiserror = "1.0"
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
-ark-crypto-primitives = { version = "0.5", default-features = false, features = ["sponge"] }
 
 [dev-dependencies]
 
