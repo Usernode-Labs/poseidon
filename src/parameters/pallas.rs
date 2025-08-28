@@ -256,6 +256,62 @@ lazy_static! {
     };
 }
 
+/// Runtime-selectable Pallas Poseidon parameter variants.
+///
+/// - T3: Embedded static (r=2, capacity=1) — optimal for Merkle 2:1 compression.
+/// - T5/T9/T12: Dynamically derived using arkworks' Grain LFSR with conservative round counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PallasVariant {
+    T3,
+    T5,
+    T9,
+    T12,
+}
+
+lazy_static! {
+    /// Pallas Poseidon t=5, alpha=5, ~128-bit security (conservative rounds)
+    pub static ref PALLAS_PARAMS_T5: ArkPoseidonConfig<ark_pallas::Fq> = {
+        // capacity = 1 (hash), rate = 4
+        // rounds based on common 128-bit settings for Pasta/alpha=5
+        crate::parameters::create_dynamic_parameters::<ark_pallas::Fq>(
+            5, /*t*/
+            8, /*full_rounds*/
+            60, /*partial_rounds*/
+            1, /*capacity*/
+        )
+    };
+    /// Pallas Poseidon t=9, alpha=5, ~128-bit security (conservative rounds)
+    pub static ref PALLAS_PARAMS_T9: ArkPoseidonConfig<ark_pallas::Fq> = {
+        // capacity = 1 (hash), rate = 8
+        crate::parameters::create_dynamic_parameters::<ark_pallas::Fq>(
+            9,
+            8,
+            64,
+            1,
+        )
+    };
+    /// Pallas Poseidon t=12, alpha=5, ~128-bit security (conservative rounds)
+    pub static ref PALLAS_PARAMS_T12: ArkPoseidonConfig<ark_pallas::Fq> = {
+        // capacity = 1 (hash), rate = 11
+        crate::parameters::create_dynamic_parameters::<ark_pallas::Fq>(
+            12,
+            8,
+            64,
+            1,
+        )
+    };
+}
+
+/// Get a reference to Pallas Poseidon parameters for the requested variant.
+pub fn pallas_params_for(variant: PallasVariant) -> &'static ArkPoseidonConfig<ark_pallas::Fq> {
+    match variant {
+        PallasVariant::T3 => &*PALLAS_PARAMS,
+        PallasVariant::T5 => &*PALLAS_PARAMS_T5,
+        PallasVariant::T9 => &*PALLAS_PARAMS_T9,
+        PallasVariant::T12 => &*PALLAS_PARAMS_T12,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

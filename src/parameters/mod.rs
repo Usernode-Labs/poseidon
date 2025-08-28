@@ -10,7 +10,8 @@ use ark_crypto_primitives::sponge::poseidon::traits::find_poseidon_ark_and_mds;
 /// Security level in bits for all parameter sets
 pub const SECURITY_LEVEL: u32 = 128;
 
-/// State size (t) for all parameter sets
+/// Default state size (t) for embedded static sets (t=3)
+/// Dynamic variants can use other t via helper constructors.
 pub const STATE_SIZE: usize = 3;
 
 /// Alpha value for S-box x^α
@@ -84,4 +85,33 @@ where
     let skip = 0u64;
     let (ark, mds) = find_poseidon_ark_and_mds::<F>(prime_bits, rate, fr, pr, skip);
     ArkPoseidonConfig::new(fr as usize, pr as usize, ALPHA, mds, ark, rate, STATE_SIZE - rate)
+}
+
+/// Create Poseidon parameters dynamically for arbitrary state size t and round counts.
+///
+/// This uses arkworks' deterministic parameter derivation (Grain LFSR) and the
+/// provided round numbers. Choose conservative round numbers for your security level.
+pub fn create_dynamic_parameters<F>(
+    t: usize,
+    full_rounds: usize,
+    partial_rounds: usize,
+    capacity: usize,
+) -> ArkPoseidonConfig<F>
+where
+    F: PrimeField,
+{
+    use ark_crypto_primitives::sponge::poseidon::traits::find_poseidon_ark_and_mds;
+    let prime_bits = F::MODULUS_BIT_SIZE as u64;
+    let rate = t
+        .checked_sub(capacity)
+        .expect("capacity must be <= t when building Poseidon parameters");
+    let skip = 0u64;
+    let (ark, mds) = find_poseidon_ark_and_mds::<F>(
+        prime_bits,
+        rate,
+        full_rounds as u64,
+        partial_rounds as u64,
+        skip,
+    );
+    ArkPoseidonConfig::new(full_rounds, partial_rounds, ALPHA, mds, ark, rate, capacity)
 }

@@ -191,6 +191,52 @@ define_curve_hasher!(
     params = vesta::VESTA_PARAMS
 );
 
+// Pallas-specific variant-selecting constructors
+impl PallasHasher {
+    /// Create a new hasher selecting Poseidon parameters by variant (t).
+    pub fn new_variant(variant: crate::parameters::pallas::PallasVariant) -> Self {
+        let params = crate::parameters::pallas::pallas_params_for(variant);
+        Self { inner: MultiFieldHasher::new_from_ref(params) }
+    }
+
+    /// Create a new hasher with custom packing config and selected variant.
+    pub fn new_with_config_variant(
+        config: PackingConfig,
+        variant: crate::parameters::pallas::PallasVariant,
+    ) -> Self {
+        let params = crate::parameters::pallas::pallas_params_for(variant);
+        Self { inner: MultiFieldHasher::new_with_config_from_ref(params, config) }
+    }
+
+    /// Create a new hasher in Domain-in-Rate mode for the selected variant.
+    pub fn new_dir_variant(variant: crate::parameters::pallas::PallasVariant) -> Self {
+        let params = crate::parameters::pallas::pallas_params_for(variant);
+        Self { inner: MultiFieldHasher::new_dir_from_ref(params) }
+    }
+
+    /// Create a new hasher in Domain-in-Rate mode with domain for the selected variant.
+    pub fn new_with_domain_dir_variant(
+        domain: impl AsRef<[u8]>,
+        variant: crate::parameters::pallas::PallasVariant,
+    ) -> Self {
+        let params = crate::parameters::pallas::pallas_params_for(variant);
+        let mut h = Self { inner: MultiFieldHasher::new_dir_from_ref(params) };
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+
+    /// Create a new hasher (tagging mode) with domain for the selected variant.
+    pub fn new_with_domain_variant(
+        domain: impl AsRef<[u8]>,
+        variant: crate::parameters::pallas::PallasVariant,
+    ) -> Self {
+        let params = crate::parameters::pallas::pallas_params_for(variant);
+        let mut h = Self { inner: MultiFieldHasher::new_from_ref(params) };
+        h.inner.absorb_domain(domain.as_ref());
+        h
+    }
+}
+
 define_curve_hasher!(
     BN254Hasher, BN254Input,
     fq = ark_bn254::Fq,
