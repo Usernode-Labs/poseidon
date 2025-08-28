@@ -67,7 +67,7 @@ fn build_merkle_binary_reuse(leaves: &[ark_pallas::Fq]) -> ark_pallas::Fq {
 
 fn bench_compress2(c: &mut Criterion) {
     let mut group = c.benchmark_group("compress2_binary");
-    let pairs = gen_inputs_pallas(1 << 12); // 4096 elems -> 2048 pairs
+    let pairs = gen_inputs_pallas(1 << 10); // 1024 elems -> 512 pairs
     let num_pairs = pairs.len() / 2;
     group.throughput(Throughput::Elements(num_pairs as u64));
 
@@ -127,13 +127,12 @@ fn bench_compress2(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
-
     group.finish();
 }
 
 fn bench_merkle_tree_build(c: &mut Criterion) {
     let mut group = c.benchmark_group("merkle_binary_build");
-    for &n_leaves in &[1usize << 8, 1 << 12, 1 << 14] { // 256, 4096, 16384
+    for &n_leaves in &[1usize << 8, 1 << 10] { // 256, 1024
         let leaves = gen_inputs_pallas(n_leaves);
         group.throughput(Throughput::Elements(n_leaves as u64));
 

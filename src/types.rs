@@ -14,99 +14,55 @@ use zeroize::ZeroizeOnDrop;
 /// 
 /// This trait ensures a consistent interface across all curve implementations
 /// while maintaining type safety and embedding curve-specific parameters.
-#[allow(private_interfaces)] // InnerHasher is intentionally private - it's an implementation detail
-pub trait PoseidonHasher<F, I> 
-where 
+pub trait PoseidonHasher<F, I>
+where
     F: PrimeField,
 {
     /// Create a new hasher with default (byte-efficient) packing configuration.
     fn new() -> Self;
-    
+
     /// Create a new hasher with custom packing configuration.
     fn new_with_config(config: PackingConfig) -> Self;
-    
-    /// Get a mutable reference to the inner MultiFieldHasher for delegation.
-    /// This is an implementation detail and should not be used directly.
-    /// Only trait implementations should provide this method.
+
+    // Hidden delegation hooks implemented per concrete hasher.
     #[doc(hidden)]
-    fn inner_mut(&mut self) -> &mut dyn InnerHasher<F, I>;
-    
-    /// Get an immutable reference to the inner MultiFieldHasher for delegation.
-    /// This is an implementation detail and should not be used directly.
-    /// Only trait implementations should provide this method.
+    fn update_field_input(&mut self, input: I);
     #[doc(hidden)]
-    fn inner_ref(&self) -> &dyn InnerHasher<F, I>;
-    
+    fn digest_result(&mut self) -> F;
+    #[doc(hidden)]
+    fn reset_hasher(&mut self);
+    #[doc(hidden)]
+    fn get_element_count(&self) -> usize;
+
     /// Update the hasher with any compatible input.
-    /// 
     /// This accepts field elements, curve points, primitives, or any type with a From implementation.
     fn update<T: Into<I>>(&mut self, input: T) {
-        self.inner_mut().update_field_input(input.into())
+        self.update_field_input(input.into())
     }
-    
-    
+
     /// Get the current hash result while preserving the hasher state.
     fn digest(&mut self) -> F {
-        self.inner_mut().digest_result()
+        self.digest_result()
     }
-    
-    
+
     /// Consume the hasher and return the final hash result.
     /// Equivalent to `digest()` but takes ownership, ensuring the hasher cannot be reused.
-    fn finalize(mut self) -> F where Self: Sized {
+    fn finalize(mut self) -> F
+    where
+        Self: Sized,
+    {
         self.digest()
     }
-    
+
     /// Reset the hasher state without changing parameters.
     /// This method securely clears all sensitive data from memory.
     fn reset(&mut self) {
-        self.inner_mut().reset_hasher()
+        self.reset_hasher()
     }
-    
+
     /// Returns the current number of elements added.
     fn element_count(&self) -> usize {
-        self.inner_ref().get_element_count()
-    }
-}
-
-/// Internal trait to abstract over the MultiFieldHasher operations.
-/// This allows us to provide default implementations in PoseidonHasher.
-pub trait InnerHasher<F, I>
-where
-    F: PrimeField,
-{
-    /// Update the hasher with a field input
-    fn update_field_input(&mut self, input: I);
-    /// Compute the hash digest
-    fn digest_result(&mut self) -> F;
-    /// Reset the hasher state
-    fn reset_hasher(&mut self);
-    /// Get the current element count
-    fn get_element_count(&self) -> usize;
-}
-
-// Implement InnerHasher for MultiFieldHasher to enable delegation
-impl<F, S, G> InnerHasher<F, FieldInput<F, S, G>> for MultiFieldHasher<F, S, G>
-where
-    F: PrimeField + ark_ff::Zero + ark_crypto_primitives::sponge::Absorb,
-    S: PrimeField,
-    G: ark_ec::AffineRepr<BaseField = F>,
-{
-    fn update_field_input(&mut self, input: FieldInput<F, S, G>) {
-        self.update(input)
-    }
-    
-    
-    fn digest_result(&mut self) -> F {
-        self.digest()
-    }
-    
-    fn reset_hasher(&mut self) {
-        self.reset()
-    }
-    
-    fn get_element_count(&self) -> usize {
-        self.element_count()
+        self.get_element_count()
     }
 }
 
@@ -133,8 +89,14 @@ macro_rules! define_curve_hasher {
                 Self { inner: MultiFieldHasher::new_with_config_from_ref(&$params, config) }
             }
 
-            fn inner_mut(&mut self) -> &mut dyn InnerHasher<$fq, $Input> { &mut self.inner }
-            fn inner_ref(&self) -> &dyn InnerHasher<$fq, $Input> { &self.inner }
+            #[inline]
+            fn update_field_input(&mut self, input: $Input) { self.inner.update(input) }
+            #[inline]
+            fn digest_result(&mut self) -> $fq { self.inner.digest() }
+            #[inline]
+            fn reset_hasher(&mut self) { self.inner.reset() }
+            #[inline]
+            fn get_element_count(&self) -> usize { self.inner.element_count() }
         }
 
         impl Default for $Hasher { fn default() -> Self { <Self as PoseidonHasher<$fq, $Input>>::new() } }
