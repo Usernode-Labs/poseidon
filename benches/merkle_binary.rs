@@ -23,6 +23,22 @@ fn compress2_reuse(h: &mut PallasHasher, a: ark_pallas::Fq, b: ark_pallas::Fq) -
     out
 }
 
+// Domain-in-Rate variants using the integrated constructors
+fn compress2_dir_new(a: ark_pallas::Fq, b: ark_pallas::Fq) -> ark_pallas::Fq {
+    let mut h = PallasHasher::new_with_domain_dir("MERKLE2");
+    h.update(a);
+    h.update(b);
+    h.finalize()
+}
+
+fn compress2_dir_reuse(h: &mut PallasHasher, a: ark_pallas::Fq, b: ark_pallas::Fq) -> ark_pallas::Fq {
+    h.update(a);
+    h.update(b);
+    let out = h.digest();
+    h.reset();
+    out
+}
+
 fn build_merkle_binary_new(leaves: &[ark_pallas::Fq]) -> ark_pallas::Fq {
     assert!(leaves.len() >= 2 && leaves.len().is_power_of_two());
     let mut level = leaves.to_vec();
@@ -83,6 +99,35 @@ fn bench_compress2(c: &mut Criterion) {
         )
     });
 
+    // Domain-in-Rate counterparts in the same group for side-by-side comparison
+    group.bench_function("dir_new_per_node", |b| {
+        b.iter_batched(
+            || pairs.clone(),
+            |inputs| {
+                let mut acc = ark_pallas::Fq::from(0u64);
+                for chunk in inputs.chunks_exact(2) {
+                    acc += compress2_dir_new(chunk[0], chunk[1]);
+                }
+                acc
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("dir_reuse_reset", |b| {
+        b.iter_batched(
+            || (pairs.clone(), PallasHasher::new_with_domain_dir("MERKLE2")),
+            |(inputs, mut h)| {
+                let mut acc = ark_pallas::Fq::from(0u64);
+                for chunk in inputs.chunks_exact(2) {
+                    acc += compress2_dir_reuse(&mut h, chunk[0], chunk[1]);
+                }
+                acc
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
     group.finish();
 }
 
@@ -99,10 +144,40 @@ fn bench_merkle_tree_build(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("reuse_reset", n_leaves), &leaves, |b, leaves| {
             b.iter_batched(|| leaves.clone(), |l| build_merkle_binary_reuse(&l), BatchSize::SmallInput)
         });
+
+        // DiR versions
+        group.bench_with_input(BenchmarkId::new("dir_new_per_node", n_leaves), &leaves, |b, leaves| {
+            b.iter_batched(|| leaves.clone(), |l| {
+                assert!(l.len().is_power_of_two());
+                let mut level = l.clone();
+                while level.len() > 1 {
+                    level = level
+                        .chunks_exact(2)
+                        .map(|c| compress2_dir_new(c[0], c[1]))
+                        .collect();
+                }
+                level[0]
+            }, BatchSize::SmallInput)
+        });
+
+        group.bench_with_input(BenchmarkId::new("dir_reuse_reset", n_leaves), &leaves, |b, leaves| {
+            b.iter_batched(|| leaves.clone(), |l| {
+                assert!(l.len().is_power_of_two());
+                let mut level = l.clone();
+                let mut h = PallasHasher::new_with_domain_dir("MERKLE2");
+                while level.len() > 1 {
+                    let mut next = Vec::with_capacity(level.len() / 2);
+                    for c in level.chunks_exact(2) {
+                        next.push(compress2_dir_reuse(&mut h, c[0], c[1]));
+                    }
+                    level = next;
+                }
+                level[0]
+            }, BatchSize::SmallInput)
+        });
     }
     group.finish();
 }
 
 criterion_group!(benches, bench_compress2, bench_merkle_tree_build);
 criterion_main!(benches);
-

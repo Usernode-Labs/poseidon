@@ -153,6 +153,24 @@ macro_rules! define_curve_hasher {
             pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
                 let mut h = <Self as PoseidonHasher<$fq, $Input>>::new_with_config(config); h.inner.absorb_domain(domain.as_ref()); h
             }
+
+            // Domain-in-Rate constructors (opt-in, separate API)
+            pub fn new_dir() -> Self {
+                Self { inner: MultiFieldHasher::new_dir_from_ref(&$params) }
+            }
+            pub fn new_with_config_dir(config: PackingConfig) -> Self {
+                Self { inner: MultiFieldHasher::new_with_config_dir_from_ref(&$params, config) }
+            }
+            pub fn new_with_domain_dir(domain: impl AsRef<[u8]>) -> Self {
+                let mut h = Self { inner: MultiFieldHasher::new_dir_from_ref(&$params) };
+                h.inner.absorb_domain(domain.as_ref());
+                h
+            }
+            pub fn new_with_config_and_domain_dir(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+                let mut h = Self { inner: MultiFieldHasher::new_with_config_dir_from_ref(&$params, config) };
+                h.inner.absorb_domain(domain.as_ref());
+                h
+            }
         }
     };
 }

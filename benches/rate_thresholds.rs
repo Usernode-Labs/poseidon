@@ -12,9 +12,21 @@ fn bench_rate_thresholds(c: &mut Criterion) {
 
     for m in 1..=12usize {
         group.throughput(Throughput::Elements(m as u64));
-        group.bench_with_input(BenchmarkId::new("absorb_m_digest", m), &m, |bch, &mm| {
+        // Tagged path
+        group.bench_with_input(BenchmarkId::new("tagged_absorb_m_digest", m), &m, |bch, &mm| {
             bch.iter_batched(
                 || PallasHasher::new_with_domain("RATE"),
+                |mut h| {
+                    for i in 0..mm { h.update(inputs[i]); }
+                    let _ = h.digest();
+                },
+                BatchSize::SmallInput,
+            );
+        });
+        // DiR path
+        group.bench_with_input(BenchmarkId::new("dir_absorb_m_digest", m), &m, |bch, &mm| {
+            bch.iter_batched(
+                || PallasHasher::new_with_domain_dir("RATE"),
                 |mut h| {
                     for i in 0..mm { h.update(inputs[i]); }
                     let _ = h.digest();

@@ -696,6 +696,7 @@ dependencies = [
  "ark-ff",
  "ark-pallas",
  "ark-vesta",
+ "arrayvec",
  "criterion",
  "lazy_static",
  "num-bigint",
