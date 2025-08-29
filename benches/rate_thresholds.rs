@@ -6,7 +6,7 @@ fn bench_rate_thresholds(c: &mut Criterion) {
     // Current params: t=3, rate=2. We sweep m=1..12 inputs to provide a
     // baseline for future larger-t comparisons while still using the crate API.
     let mut group = c.benchmark_group("rate_thresholds_pallas");
-    let inputs: Vec<ark_pallas::Fq> = (1u64..=12).map(|i| ark_pallas::Fq::from(i)).collect();
+    let inputs: Vec<ark_pallas::Fq> = (1u64..=12).map(ark_pallas::Fq::from).collect();
 
     for m in 1..=12usize {
         group.throughput(Throughput::Elements(m as u64));
@@ -14,8 +14,8 @@ fn bench_rate_thresholds(c: &mut Criterion) {
             bch.iter_batched(
                 || PallasHasher::new_with_domain("RATE"),
                 |mut h| {
-                    for i in 0..mm {
-                        h.update(inputs[i]);
+                    for input in inputs.iter().take(mm) {
+                        h.update(*input);
                     }
                     let _ = h.digest();
                 },

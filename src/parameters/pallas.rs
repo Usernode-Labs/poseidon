@@ -54,11 +54,11 @@ lazy_static! {
 /// Get a reference to Pallas Poseidon parameters for the requested variant.
 pub fn pallas_params_for(variant: PallasVariant) -> &'static ArkPoseidonConfig<ark_pallas::Fq> {
     match variant {
-        PallasVariant::T3 => &*PALLAS_PARAMS,
-        PallasVariant::T4 => &*PALLAS_PARAMS_T4,
-        PallasVariant::T5 => &*PALLAS_PARAMS_T5,
-        PallasVariant::T9 => &*PALLAS_PARAMS_T9,
-        PallasVariant::T12 => &*PALLAS_PARAMS_T12,
+        PallasVariant::T3 => &PALLAS_PARAMS,
+        PallasVariant::T4 => &PALLAS_PARAMS_T4,
+        PallasVariant::T5 => &PALLAS_PARAMS_T5,
+        PallasVariant::T9 => &PALLAS_PARAMS_T9,
+        PallasVariant::T12 => &PALLAS_PARAMS_T12,
     }
 }
 

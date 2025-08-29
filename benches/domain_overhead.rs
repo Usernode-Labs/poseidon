@@ -24,7 +24,7 @@ fn bench_domain_overhead(c: &mut Criterion) {
     // Baseline (DiR): no domain
     group.bench_function(BenchmarkId::new("baseline_no_domain", 2), |bch| {
         bch.iter_batched(
-            || PallasHasher::new(),
+            PallasHasher::new,
             |mut h| {
                 h.update(a);
                 h.update(b);
@@ -39,7 +39,7 @@ fn bench_domain_overhead(c: &mut Criterion) {
             bch.iter(|| compress2_with_domain(dom.as_str(), a, b));
         });
         // DiR with domain (default)
-        group.bench_function(BenchmarkId::new(&format!("{}", label), 2), |bch| {
+        group.bench_function(BenchmarkId::new(label.to_string(), 2), |bch| {
             bch.iter_batched(
                 || PallasHasher::new_with_domain(dom.as_str()),
                 |mut h| {

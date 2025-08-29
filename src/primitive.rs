@@ -356,9 +356,6 @@ impl PackingBuffer {
     }
 }
 
-/// Serialize a RustInput into bytes for packing.
-// Serialization now performed by PrimitiveInput From impls; no separate function needed
-
 // Manual implementation of ZeroizeOnDrop for PackingBuffer
 // since VecDeque doesn't implement Zeroize automatically
 impl ZeroizeOnDrop for PackingBuffer {}
