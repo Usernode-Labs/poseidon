@@ -20,7 +20,7 @@
 //! ## Usage
 //!
 //! ```rust
-//! use poseidon_hash::primitive::{RustInput, PackingMode};
+//! use poseidon_hash::primitive::PackingMode;
 //! use poseidon_hash::PallasHasher;
 //! use poseidon_hash::PoseidonHasher;
 //!
@@ -80,141 +80,95 @@ impl Default for PackingConfig {
     }
 }
 
-/// Input types for basic Rust primitives that can be hashed.
+/// Encoded primitive input (tag + serialized bytes).
 #[derive(Debug, Clone)]
-pub enum RustInput {
-    /// Boolean value
-    Bool(bool),
-    /// 8-bit unsigned integer
-    U8(u8),
-    /// 16-bit unsigned integer  
-    U16(u16),
-    /// 32-bit unsigned integer
-    U32(u32),
-    /// 64-bit unsigned integer
-    U64(u64),
-    /// 128-bit unsigned integer
-    U128(u128),
-    /// Platform-specific unsigned integer
-    Usize(usize),
-    /// 8-bit signed integer
-    I8(i8),
-    /// 16-bit signed integer
-    I16(i16),
-    /// 32-bit signed integer
-    I32(i32),
-    /// 64-bit signed integer
-    I64(i64),
-    /// 128-bit signed integer
-    I128(i128),
-    /// Platform-specific signed integer
-    Isize(isize),
-    /// UTF-8 string
-    String(String),
-    /// String slice (converted to owned String for consistent serialization)
-    Str(String),
-    /// Byte array
-    Bytes(Vec<u8>),
-    /// Byte slice (converted to owned Vec for consistent serialization)
-    ByteSlice(Vec<u8>),
+pub struct PrimitiveInput {
+    pub tag: u8,
+    pub bytes: Vec<u8>,
 }
 
-impl RustInput {
-    /// Create a RustInput from a string slice
-    pub fn from_string_slice(s: &str) -> Self {
-        Self::Str(s.to_string())
+fn encode_varint(mut value: usize) -> Vec<u8> {
+    let mut out = Vec::new();
+    while value >= 0x80 {
+        out.push((value & 0x7F | 0x80) as u8);
+        value >>= 7;
     }
-
-    /// Create a RustInput from a byte slice
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        Self::ByteSlice(bytes.to_vec())
-    }
+    out.push(value as u8);
+    out
 }
 
-// Simple From implementations - much cleaner than 17 separate impls!
-impl From<bool> for RustInput {
+impl From<bool> for PrimitiveInput {
     fn from(v: bool) -> Self {
-        Self::Bool(v)
+        Self {
+            tag: TAG_BOOL,
+            bytes: vec![if v { 1 } else { 0 }],
+        }
     }
 }
-impl From<u8> for RustInput {
-    fn from(v: u8) -> Self {
-        Self::U8(v)
-    }
+macro_rules! impl_primitive_from_ints {
+    ( $( $t:ty => $tag:ident ),* $(,)? ) => {
+        $(
+            impl From<$t> for PrimitiveInput {
+                fn from(v: $t) -> Self {
+                    Self { tag: $tag, bytes: v.to_le_bytes().to_vec() }
+                }
+            }
+        )*
+    };
 }
-impl From<u16> for RustInput {
-    fn from(v: u16) -> Self {
-        Self::U16(v)
-    }
+
+impl_primitive_from_ints! {
+    u8 => TAG_U8,
+    u16 => TAG_U16,
+    u32 => TAG_U32,
+    u64 => TAG_U64,
+    u128 => TAG_U128,
+    usize => TAG_USIZE,
+    i8 => TAG_I8,
+    i16 => TAG_I16,
+    i32 => TAG_I32,
+    i64 => TAG_I64,
+    i128 => TAG_I128,
+    isize => TAG_ISIZE,
 }
-impl From<u32> for RustInput {
-    fn from(v: u32) -> Self {
-        Self::U32(v)
-    }
-}
-impl From<u64> for RustInput {
-    fn from(v: u64) -> Self {
-        Self::U64(v)
-    }
-}
-impl From<u128> for RustInput {
-    fn from(v: u128) -> Self {
-        Self::U128(v)
-    }
-}
-impl From<usize> for RustInput {
-    fn from(v: usize) -> Self {
-        Self::Usize(v)
-    }
-}
-impl From<i8> for RustInput {
-    fn from(v: i8) -> Self {
-        Self::I8(v)
-    }
-}
-impl From<i16> for RustInput {
-    fn from(v: i16) -> Self {
-        Self::I16(v)
-    }
-}
-impl From<i32> for RustInput {
-    fn from(v: i32) -> Self {
-        Self::I32(v)
-    }
-}
-impl From<i64> for RustInput {
-    fn from(v: i64) -> Self {
-        Self::I64(v)
-    }
-}
-impl From<i128> for RustInput {
-    fn from(v: i128) -> Self {
-        Self::I128(v)
-    }
-}
-impl From<isize> for RustInput {
-    fn from(v: isize) -> Self {
-        Self::Isize(v)
-    }
-}
-impl From<String> for RustInput {
+impl From<String> for PrimitiveInput {
     fn from(v: String) -> Self {
-        Self::String(v)
+        let mut bytes = encode_varint(v.len());
+        bytes.extend_from_slice(v.as_bytes());
+        Self {
+            tag: TAG_STRING,
+            bytes,
+        }
     }
 }
-impl From<&str> for RustInput {
+impl From<&str> for PrimitiveInput {
     fn from(v: &str) -> Self {
-        Self::Str(v.to_string())
+        let mut bytes = encode_varint(v.len());
+        bytes.extend_from_slice(v.as_bytes());
+        Self {
+            tag: TAG_STRING,
+            bytes,
+        }
     }
 }
-impl From<Vec<u8>> for RustInput {
+impl From<Vec<u8>> for PrimitiveInput {
     fn from(v: Vec<u8>) -> Self {
-        Self::Bytes(v)
+        let mut bytes = encode_varint(v.len());
+        bytes.extend_from_slice(&v);
+        Self {
+            tag: TAG_BYTES,
+            bytes,
+        }
     }
 }
-impl From<&[u8]> for RustInput {
+impl From<&[u8]> for PrimitiveInput {
     fn from(v: &[u8]) -> Self {
-        Self::ByteSlice(v.to_vec())
+        let mut bytes = encode_varint(v.len());
+        bytes.extend_from_slice(v);
+        Self {
+            tag: TAG_BYTES,
+            bytes,
+        }
     }
 }
 
@@ -403,74 +357,7 @@ impl PackingBuffer {
 }
 
 /// Serialize a RustInput into bytes for packing.
-pub fn serialize_rust_input(input: &RustInput, buffer: &mut PackingBuffer) {
-    match input {
-        RustInput::Bool(b) => {
-            buffer.push_tag(TAG_BOOL);
-            buffer.push_bool(*b)
-        }
-        // Unsigned integers - direct conversion is safe
-        RustInput::U8(n) => {
-            buffer.push_tag(TAG_U8);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::U16(n) => {
-            buffer.push_tag(TAG_U16);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::U32(n) => {
-            buffer.push_tag(TAG_U32);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::U64(n) => {
-            buffer.push_tag(TAG_U64);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::U128(n) => {
-            buffer.push_tag(TAG_U128);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::Usize(n) => {
-            buffer.push_tag(TAG_USIZE);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        // Signed integers - preserve bit pattern via to_le_bytes
-        RustInput::I8(n) => {
-            buffer.push_tag(TAG_I8);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::I16(n) => {
-            buffer.push_tag(TAG_I16);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::I32(n) => {
-            buffer.push_tag(TAG_I32);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::I64(n) => {
-            buffer.push_tag(TAG_I64);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::I128(n) => {
-            buffer.push_tag(TAG_I128);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        RustInput::Isize(n) => {
-            buffer.push_tag(TAG_ISIZE);
-            buffer.push_bytes(&n.to_le_bytes())
-        }
-        // Strings and bytes
-        RustInput::String(s) | RustInput::Str(s) => {
-            buffer.push_tag(TAG_STRING);
-            buffer.push_string(s)
-        }
-        RustInput::Bytes(bytes) | RustInput::ByteSlice(bytes) => {
-            buffer.push_tag(TAG_BYTES);
-            buffer.push_varint(bytes.len());
-            buffer.push_bytes(bytes);
-        }
-    }
-}
+// Serialization now performed by PrimitiveInput From impls; no separate function needed
 
 // Manual implementation of ZeroizeOnDrop for PackingBuffer
 // since VecDeque doesn't implement Zeroize automatically
@@ -569,9 +456,12 @@ mod tests {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
 
-        serialize_rust_input(&RustInput::Bool(true), &mut buffer);
-        serialize_rust_input(&RustInput::U64(12345), &mut buffer);
-        serialize_rust_input(&RustInput::String("test".to_string()), &mut buffer);
+        buffer.push_tag(TAG_BOOL);
+        buffer.push_bool(true);
+        buffer.push_tag(TAG_U64);
+        buffer.push_bytes(&12345u64.to_le_bytes());
+        buffer.push_tag(TAG_STRING);
+        buffer.push_string("test");
 
         assert!(!buffer.is_empty());
     }

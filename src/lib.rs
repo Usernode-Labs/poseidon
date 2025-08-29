@@ -72,7 +72,7 @@ bn254_hasher.update(ark_bn254::Fr::from(123u64));    // ✓ BN254 scalar
 // Re-export main types at crate root for convenience
 pub use hasher::{FieldInput, HasherError, HasherResult, MultiFieldHasher};
 pub use parameters::SECURITY_LEVEL;
-pub use primitive::{PackingConfig, PackingMode, PaddingMode, RustInput};
+pub use primitive::{PackingConfig, PackingMode, PaddingMode};
 pub use types::PoseidonHasher;
 
 // Re-export curve-specific hashers and input types

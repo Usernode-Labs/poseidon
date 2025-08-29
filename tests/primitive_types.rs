@@ -96,10 +96,10 @@ fn test_primitive_bytes_hashing() {
 }
 
 #[test]
-fn test_primitive_enum_api() {
+fn test_primitive_api() {
     let mut hasher = PallasHasher::new();
 
-    // Test using the RustInput enum API
+    // Test using the unified primitive API
     hasher.update(true);
     hasher.update(12345u64);
     hasher.update("test".to_string());

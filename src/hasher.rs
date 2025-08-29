@@ -33,7 +33,7 @@
 //! ```
 
 use crate::ark_poseidon::ArkPoseidonSponge;
-use crate::primitive::{PackingBuffer, PackingConfig, RustInput, serialize_rust_input};
+use crate::primitive::{PackingBuffer, PackingConfig, PrimitiveInput};
 use ark_crypto_primitives::sponge::{CryptographicSponge, FieldBasedCryptographicSponge};
 use ark_ec::AffineRepr;
 use ark_ff::{BigInteger, PrimeField, Zero};
@@ -71,11 +71,11 @@ pub enum FieldInput<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> 
     /// Curve point in affine representation - coordinates extracted as base field elements
     CurvePoint(G),
     /// Primitive Rust type that needs packing
-    Primitive(RustInput),
+    Primitive(PrimitiveInput),
 }
 
 // Single blanket implementation for all primitive types!
-impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<RustInput>> From<T>
+impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<PrimitiveInput>> From<T>
     for FieldInput<F, S, G>
 {
     fn from(value: T) -> Self {
@@ -431,9 +431,10 @@ where
     /// # Arguments
     ///
     /// * `input` - The primitive value to add
-    fn update_primitive(&mut self, input: RustInput) {
+    fn update_primitive(&mut self, input: PrimitiveInput) {
         // Serialize the input into the primitive buffer
-        serialize_rust_input(&input, &mut self.primitive_buffer);
+        self.primitive_buffer.push_tag(input.tag);
+        self.primitive_buffer.push_bytes(&input.bytes);
         // Extract any complete field elements
         let field_elements = self.primitive_buffer.extract_field_elements::<F>();
         if !field_elements.is_empty() {
