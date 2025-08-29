@@ -155,34 +155,7 @@ macro_rules! define_curve_hasher {
                 h
             }
 
-            // Domain-in-Rate constructors (opt-in, separate API)
-            pub fn new_dir() -> Self {
-                Self {
-                    inner: MultiFieldHasher::new_dir_from_ref(&$params),
-                }
-            }
-            pub fn new_with_config_dir(config: PackingConfig) -> Self {
-                Self {
-                    inner: MultiFieldHasher::new_with_config_dir_from_ref(&$params, config),
-                }
-            }
-            pub fn new_with_domain_dir(domain: impl AsRef<[u8]>) -> Self {
-                let mut h = Self {
-                    inner: MultiFieldHasher::new_dir_from_ref(&$params),
-                };
-                h.inner.absorb_domain(domain.as_ref());
-                h
-            }
-            pub fn new_with_config_and_domain_dir(
-                config: PackingConfig,
-                domain: impl AsRef<[u8]>,
-            ) -> Self {
-                let mut h = Self {
-                    inner: MultiFieldHasher::new_with_config_dir_from_ref(&$params, config),
-                };
-                h.inner.absorb_domain(domain.as_ref());
-                h
-            }
+            // Domain-in-Rate is the default; dedicated constructors removed
         }
     };
 }
@@ -226,28 +199,7 @@ impl PallasHasher {
         }
     }
 
-    /// Create a new hasher in Domain-in-Rate mode for the selected variant.
-    pub fn new_dir_variant(variant: crate::parameters::pallas::PallasVariant) -> Self {
-        let params = crate::parameters::pallas::pallas_params_for(variant);
-        Self {
-            inner: MultiFieldHasher::new_dir_from_ref(params),
-        }
-    }
-
-    /// Create a new hasher in Domain-in-Rate mode with domain for the selected variant.
-    pub fn new_with_domain_dir_variant(
-        domain: impl AsRef<[u8]>,
-        variant: crate::parameters::pallas::PallasVariant,
-    ) -> Self {
-        let params = crate::parameters::pallas::pallas_params_for(variant);
-        let mut h = Self {
-            inner: MultiFieldHasher::new_dir_from_ref(params),
-        };
-        h.inner.absorb_domain(domain.as_ref());
-        h
-    }
-
-    /// Create a new hasher (tagging mode) with domain for the selected variant.
+    /// Create a new hasher with domain for the selected variant (Domain-in-Rate default).
     pub fn new_with_domain_variant(
         domain: impl AsRef<[u8]>,
         variant: crate::parameters::pallas::PallasVariant,

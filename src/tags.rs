@@ -1,18 +1,9 @@
-//! Internal tagging scheme for domain/type separation.
-//! Tags are small u8 discriminants used to disambiguate input kinds.
+//! Primitive tagging scheme
 //!
-//! Note: For primitives we inject tags into the byte stream.
-//! For field/point inputs we currently precede with a tag field element F::from(tag).
-//! A future refinement could unify all inputs through the byte-packing path.
-
-// Field-level domains
-pub const TAG_BASE_FIELD: u8 = 0x01;
-pub const TAG_SCALAR_FIELD: u8 = 0x02;
-pub const TAG_CURVE_POINT_FINITE: u8 = 0x03;
-pub const TAG_CURVE_POINT_INFINITY: u8 = 0x04;
-
-// Domain context (field-level tag precedes a tagged byte sequence)
-pub const TAG_DOMAIN_CTX: u8 = 0x05;
+//! Tags are small u8 discriminants used to disambiguate primitive input kinds.
+//! They are injected into the primitive byte stream before packing into field
+//! elements. Field/point inputs are disambiguated via Domain-in-Rate class
+//! tweaks and do not use tags anymore.
 
 // Primitive types (byte-level tags)
 pub const TAG_BOOL: u8 = 0x10;

@@ -34,7 +34,7 @@
 
 use crate::ark_poseidon::ArkPoseidonSponge;
 use crate::primitive::{PackingBuffer, PackingConfig, RustInput, serialize_rust_input};
-use crate::tags::*;
+// field-level tags removed in DiR-only mode; primitive tags are used in primitive.rs
 use ark_crypto_primitives::sponge::{CryptographicSponge, FieldBasedCryptographicSponge};
 use ark_ec::AffineRepr;
 use ark_ff::{BigInteger, PrimeField, Zero};
@@ -123,18 +123,15 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     /// Phantom data to track curve point type G without storing instances  
     #[zeroize(skip)]
     _phantom_g: PhantomData<G>,
-    // Tagging strategy
-    #[zeroize(skip)]
-    tagging: TaggingStrategy,
     // Poseidon rate (from params)
     #[zeroize(skip)]
     rate: usize,
     // Current lane cursor within the rate for DiR mode
     #[zeroize(skip)]
     lane_cursor: usize,
-    // Domain-in-rate constants per class (only when tagging = DomainInRate)
+    // Domain-in-Rate constants per class
     #[zeroize(skip)]
-    dir_consts: Option<DirConstants<F>>,
+    dir_consts: DirConstants<F>,
     // Pending per-domain tweak to apply at next block boundary (DiR)
     #[zeroize(skip)]
     pending_domain: Option<[F; MAX_RATE]>,
@@ -149,11 +146,7 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
 const SAFETY_MARGIN_BITS: usize = 8;
 const MAX_RATE: usize = 12;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TaggingStrategy {
-    FieldElementTags,
-    DomainInRate,
-}
+// Tagging strategy enum removed: library operates in Domain-in-Rate mode only
 
 #[derive(Debug, Clone)]
 struct DirConstants<F: PrimeField + Zero> {
@@ -221,6 +214,56 @@ where
     G: AffineRepr<BaseField = F>,
 {
     #[inline]
+    /// Compute Domain-in-Rate adjusted elements without mutating hasher state.
+    ///
+    /// Applies per-class lane tweaks and any pending one-block domain tweak
+    /// relative to the current internal cursor, but does not change internal
+    /// counters or pending flags. Used by `digest()` to absorb remaining
+    /// buffered elements into a cloned sponge while preserving the live state.
+    fn compute_domain_in_rate_adjusted_elements_without_mutating_state(
+        &self,
+        elems: &[F],
+        class: DirClass,
+    ) -> Vec<F> {
+        let consts = &self.dir_consts;
+        let class_vec = match class {
+            DirClass::Base => &consts.base,
+            DirClass::Scalar => &consts.scalar,
+            DirClass::CurveFinite => &consts.curve_finite,
+            DirClass::CurveInfinity => &consts.curve_infinity,
+            DirClass::Primitive => &consts.primitive,
+        };
+
+        let mut adjusted: Vec<F> = Vec::with_capacity(elems.len());
+        let mut lane_cursor = self.lane_cursor;
+        let mut pending_domain_at_block_start = self.pending_domain_at_block_start;
+        let mut domain_lanes_remaining = self.domain_lanes_remaining;
+        let mut dom_active = self.pending_domain.is_some();
+        let dom_ref = self.pending_domain.as_ref();
+        for &e in elems.iter() {
+            let lane = lane_cursor % self.rate;
+            let mut v = e + class_vec[lane];
+            if dom_active && let Some(dom) = dom_ref {
+                let should_apply_now = if pending_domain_at_block_start {
+                    lane == 0
+                } else {
+                    true
+                };
+                if should_apply_now && domain_lanes_remaining > 0 {
+                    v += dom[lane];
+                    domain_lanes_remaining -= 1;
+                    pending_domain_at_block_start = false;
+                    if domain_lanes_remaining == 0 {
+                        dom_active = false;
+                    }
+                }
+            }
+            adjusted.push(v);
+            lane_cursor = (lane_cursor + 1) % self.rate;
+        }
+        adjusted
+    }
+    #[inline]
     fn assert_scalar_fits_base_field() {
         // We intentionally keep the API infallible. Enforce at construction time
         // that the scalar field does not exceed the base field by bit size.
@@ -247,6 +290,7 @@ where
     pub fn new(params: crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self {
         Self::assert_scalar_fits_base_field();
         let sponge = ArkPoseidonSponge::new(&params);
+        let rate = params.rate;
         Self {
             base_sponge: sponge.clone(),
             sponge,
@@ -254,10 +298,9 @@ where
             count: 0,
             _phantom_s: PhantomData,
             _phantom_g: PhantomData,
-            tagging: TaggingStrategy::FieldElementTags,
-            rate: params.rate,
+            rate,
             lane_cursor: 0,
-            dir_consts: None,
+            dir_consts: build_dir_constants::<F>(rate),
             pending_domain: None,
             pending_domain_at_block_start: false,
             domain_lanes_remaining: 0,
@@ -291,51 +334,6 @@ where
     ) -> Self {
         Self::assert_scalar_fits_base_field();
         let sponge = ArkPoseidonSponge::new(&params);
-        Self {
-            base_sponge: sponge.clone(),
-            sponge,
-            primitive_buffer: PackingBuffer::new::<F>(packing_config),
-            count: 0,
-            _phantom_s: PhantomData,
-            _phantom_g: PhantomData,
-            tagging: TaggingStrategy::FieldElementTags,
-            rate: params.rate,
-            lane_cursor: 0,
-            dir_consts: None,
-            pending_domain: None,
-            pending_domain_at_block_start: false,
-            domain_lanes_remaining: 0,
-        }
-    }
-
-    /// Creates a new hasher using Domain-in-Rate tagging strategy.
-    pub fn new_dir(params: crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self {
-        Self::assert_scalar_fits_base_field();
-        let sponge = ArkPoseidonSponge::new(&params);
-        let rate = params.rate;
-        Self {
-            base_sponge: sponge.clone(),
-            sponge,
-            primitive_buffer: PackingBuffer::new::<F>(PackingConfig::default()),
-            count: 0,
-            _phantom_s: PhantomData,
-            _phantom_g: PhantomData,
-            tagging: TaggingStrategy::DomainInRate,
-            rate,
-            lane_cursor: 0,
-            dir_consts: Some(build_dir_constants::<F>(rate)),
-            pending_domain: None,
-            pending_domain_at_block_start: false,
-            domain_lanes_remaining: 0,
-        }
-    }
-
-    pub fn new_with_config_dir(
-        params: crate::ark_poseidon::ArkPoseidonConfig<F>,
-        packing_config: PackingConfig,
-    ) -> Self {
-        Self::assert_scalar_fits_base_field();
-        let sponge = ArkPoseidonSponge::new(&params);
         let rate = params.rate;
         Self {
             base_sponge: sponge.clone(),
@@ -344,10 +342,9 @@ where
             count: 0,
             _phantom_s: PhantomData,
             _phantom_g: PhantomData,
-            tagging: TaggingStrategy::DomainInRate,
             rate,
             lane_cursor: 0,
-            dir_consts: Some(build_dir_constants::<F>(rate)),
+            dir_consts: build_dir_constants::<F>(rate),
             pending_domain: None,
             pending_domain_at_block_start: false,
             domain_lanes_remaining: 0,
@@ -373,75 +370,22 @@ where
         Self::new_with_config(crate::parameters::clone_parameters(params), packing_config)
     }
 
-    pub fn new_dir_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self
-    where
-        F: Clone,
-    {
-        Self::new_dir(crate::parameters::clone_parameters(params))
-    }
+    // DiR-only mode: specialized constructors removed; use new()/new_with_config()
 
-    pub fn new_with_config_dir_from_ref(
-        params: &crate::ark_poseidon::ArkPoseidonConfig<F>,
-        packing_config: PackingConfig,
-    ) -> Self
-    where
-        F: Clone,
-    {
-        Self::new_with_config_dir(crate::parameters::clone_parameters(params), packing_config)
-    }
-
-    /// Absorb a domain context as a tagged byte sequence at the start of the state.
+    /// Absorb a domain context using Domain-in-Rate lane tweaks.
     /// This namespaces the hasher so identical inputs produce different hashes across domains.
     pub fn absorb_domain(&mut self, domain: &[u8]) {
-        match self.tagging {
-            TaggingStrategy::FieldElementTags => {
-                // Field-level domain tag absorbed into both base and live sponge
-                let v = vec![F::from(TAG_DOMAIN_CTX as u64)];
-                self.sponge.absorb(&v);
-                self.base_sponge.absorb(&v);
-                self.count += 1;
-
-                // Fixed, config-independent domain encoding
-                let vlen = vec![F::from(domain.len() as u64)];
-                self.sponge.absorb(&vlen);
-                self.base_sponge.absorb(&vlen);
-                self.count += 1;
-
-                let chunk = Self::max_bytes_per_field();
-                let mut i = 0;
-                while i < domain.len() {
-                    let end = std::cmp::min(i + chunk, domain.len());
-                    let fe = F::from_le_bytes_mod_order(&domain[i..end]);
-                    let vv = vec![fe];
-                    self.sponge.absorb(&vv);
-                    self.base_sponge.absorb(&vv);
-                    self.count += 1;
-                    i = end;
-                }
-            }
-            TaggingStrategy::DomainInRate => {
-                // Derive per-lane tweak from the actual domain bytes.
-                // Apply starting at the next block boundary (lane 0).
-                let tweak = derive_domain_tweak::<F>(domain, self.rate);
-                self.pending_domain = Some(tweak);
-                self.pending_domain_at_block_start = true;
-                self.domain_lanes_remaining = self.rate;
-            }
-        }
+        // Derive per-lane tweak from the actual domain bytes.
+        // Apply starting at the next block boundary (lane 0).
+        let tweak = derive_domain_tweak::<F>(domain, self.rate);
+        self.pending_domain = Some(tweak);
+        self.pending_domain_at_block_start = true;
+        self.domain_lanes_remaining = self.rate;
     }
 
     /// Absorbs a base field element (Fq) directly into the hasher state.
     pub fn update_base_field(&mut self, element: F) {
-        match self.tagging {
-            TaggingStrategy::FieldElementTags => {
-                let v = vec![F::from(TAG_BASE_FIELD as u64), element];
-                self.sponge.absorb(&v);
-                self.count += v.len();
-            }
-            TaggingStrategy::DomainInRate => {
-                self.absorb_dir(&[element], DirClass::Base);
-            }
-        }
+        self.absorb_dir(&[element], DirClass::Base);
     }
 
     /// Absorbs a scalar field element (Fr) with automatic conversion to base field (Fq).
@@ -461,43 +405,16 @@ where
         }
         let bytes = element.into_bigint().to_bytes_le();
         let converted = F::from_le_bytes_mod_order(&bytes);
-        match self.tagging {
-            TaggingStrategy::FieldElementTags => {
-                let vtag = vec![F::from(TAG_SCALAR_FIELD as u64)];
-                self.sponge.absorb(&vtag);
-                self.count += vtag.len();
-                let v = vec![converted];
-                self.sponge.absorb(&v);
-                self.count += v.len();
-            }
-            TaggingStrategy::DomainInRate => {
-                self.absorb_dir(&[converted], DirClass::Scalar);
-            }
-        }
+        self.absorb_dir(&[converted], DirClass::Scalar);
     }
 
     /// Absorbs a curve point by extracting and hashing its affine coordinates.
     pub fn update_curve_point(&mut self, point: G) {
-        match self.tagging {
-            TaggingStrategy::FieldElementTags => {
-                if let Some((x, y)) = point.xy() {
-                    let v = vec![F::from(TAG_CURVE_POINT_FINITE as u64), x, y];
-                    self.sponge.absorb(&v);
-                    self.count += v.len();
-                } else {
-                    let v = vec![F::from(TAG_CURVE_POINT_INFINITY as u64)];
-                    self.sponge.absorb(&v);
-                    self.count += v.len();
-                }
-            }
-            TaggingStrategy::DomainInRate => {
-                if let Some((x, y)) = point.xy() {
-                    self.absorb_dir(&[x, y], DirClass::CurveFinite);
-                } else {
-                    // Represent infinity as a single tweaked zero element
-                    self.absorb_dir(&[F::zero()], DirClass::CurveInfinity);
-                }
-            }
+        if let Some((x, y)) = point.xy() {
+            self.absorb_dir(&[x, y], DirClass::CurveFinite);
+        } else {
+            // Represent infinity as a single tweaked zero element
+            self.absorb_dir(&[F::zero()], DirClass::CurveInfinity);
         }
     }
 
@@ -527,15 +444,7 @@ where
         // Extract any complete field elements
         let field_elements = self.primitive_buffer.extract_field_elements::<F>();
         if !field_elements.is_empty() {
-            match self.tagging {
-                TaggingStrategy::FieldElementTags => {
-                    self.sponge.absorb(&field_elements);
-                    self.count += field_elements.len();
-                }
-                TaggingStrategy::DomainInRate => {
-                    self.absorb_dir(&field_elements, DirClass::Primitive);
-                }
-            }
+            self.absorb_dir(&field_elements, DirClass::Primitive);
         }
     }
 
@@ -545,7 +454,12 @@ where
         let mut buf = self.primitive_buffer.clone();
         let remaining = buf.flush_remaining::<F>();
         if !remaining.is_empty() {
-            sponge.absorb(&remaining);
+            // Apply DiR tweaks relative to current state without mutating it
+            let adjusted = self.compute_domain_in_rate_adjusted_elements_without_mutating_state(
+                &remaining,
+                DirClass::Primitive,
+            );
+            sponge.absorb(&adjusted);
         }
         sponge.squeeze_native_field_elements(1)[0]
     }
@@ -578,12 +492,12 @@ where
     pub fn finalize(mut self) -> F {
         let remaining = self.primitive_buffer.flush_remaining::<F>();
         if !remaining.is_empty() {
-            self.sponge.absorb(&remaining);
+            self.absorb_dir(&remaining, DirClass::Primitive);
         }
         self.sponge.squeeze_native_field_elements(1)[0]
     }
 
-    /// Resets the hasher state without changing parameters.
+    /// Resets the hasher state without changing parameters (DiR baseline).
     ///
     /// This method securely clears all sensitive data from memory using zeroization.
     pub fn reset(&mut self) {
@@ -619,7 +533,7 @@ where
 {
     fn absorb_dir(&mut self, elems: &[F], class: DirClass) {
         // Per-class lane constants
-        let consts = self.dir_consts.as_ref().expect("DIR constants missing");
+        let consts = &self.dir_consts;
         let class_vec = match class {
             DirClass::Base => &consts.base,
             DirClass::Scalar => &consts.scalar,

@@ -21,23 +21,10 @@ fn bench_domain_overhead(c: &mut Criterion) {
         ("long64", "Y".repeat(64)),
     ];
 
-    // Baseline: no domain
+    // Baseline (DiR): no domain
     group.bench_function(BenchmarkId::new("baseline_no_domain", 2), |bch| {
         bch.iter_batched(
             || PallasHasher::new(),
-            |mut h| {
-                h.update(a);
-                h.update(b);
-                let _ = h.finalize();
-            },
-            BatchSize::SmallInput,
-        );
-    });
-
-    // DiR baseline: no domain in-rate (constructor only)
-    group.bench_function(BenchmarkId::new("dir_baseline_no_domain", 2), |bch| {
-        bch.iter_batched(
-            || PallasHasher::new_dir(),
             |mut h| {
                 h.update(a);
                 h.update(b);
@@ -51,15 +38,14 @@ fn bench_domain_overhead(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new(*label, 2), |bch| {
             bch.iter(|| compress2_with_domain(dom.as_str(), a, b));
         });
-        // DiR with domain
-        group.bench_function(BenchmarkId::new(&format!("dir_{}", label), 2), |bch| {
+        // DiR with domain (default)
+        group.bench_function(BenchmarkId::new(&format!("{}", label), 2), |bch| {
             bch.iter_batched(
-                || PallasHasher::new_with_domain_dir(dom.as_str()),
+                || PallasHasher::new_with_domain(dom.as_str()),
                 |mut h| {
-                    let mut hh = h;
-                    hh.update(a);
-                    hh.update(b);
-                    let _ = hh.finalize();
+                    h.update(a);
+                    h.update(b);
+                    let _ = h.finalize();
                 },
                 BatchSize::SmallInput,
             );

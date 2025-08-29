@@ -6,9 +6,9 @@ Type‑safe, multi‑curve Poseidon hash with domain/type separation and an arkw
 
 - Poseidon sponge (arkworks): t=3, rate=2, capacity=1
 - Domain separation: per-hasher domain strings to namespace outputs
-- Type tags: disambiguate BaseField, ScalarField, CurvePoint (finite/infinity), and primitives
+- Per-class lane tweaks: Disambiguate BaseField, ScalarField, CurvePoint (finite/infinity), and primitives via Domain‑in‑Rate tweaks (no field‑level tags)
 - Primitive packing: byte‑efficient (default) or circuit‑friendly
-- Multi-curve: Pallas, Vesta, BN254, BLS12-381, BLS12-377 (embedded parameters)
+- Multi-curve: Pallas, Vesta, BN254, BLS12-381, BLS12-377 (dynamic parameters via arkworks)
 - Memory hygiene: primitive packing buffers zeroized on drop/reset
 
 ## Installation
@@ -28,7 +28,7 @@ use poseidon_hash::PoseidonHasher; // brings update/digest/reset/finalize into s
 use ark_ec::AffineRepr;
 
 // Create a namespaced hasher (recommended)
-let mut hasher = PallasHasher::new_with_domain("VRF_DOMAIN");
+let mut hasher = PallasHasher::new_with_domain("VRF_DOMAIN"); // Domain-in-Rate is the default
 
 // Update with different types (tags added automatically)
 hasher.update(ark_pallas::Fr::from(42u64));              // scalar field
@@ -210,4 +210,4 @@ Please ensure:
 ## Acknowledgments
 
 Based on *"Poseidon: A New Hash Function for Zero-Knowledge Proof Systems"*.
-Parameters generated using the official reference implementation with 128-bit security level.
+Parameters derived deterministically via arkworks (Grain LFSR) with a 128-bit security target.
