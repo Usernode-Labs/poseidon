@@ -1,8 +1,8 @@
 //! Tests to ensure domain/type tags prevent cross-type collisions.
 
-use ark_ff::{PrimeField, BigInteger};
-use poseidon_hash::types::PallasHasher;
+use ark_ff::{BigInteger, PrimeField};
 use poseidon_hash::PoseidonHasher;
+use poseidon_hash::types::PallasHasher;
 
 #[test]
 fn test_basefield_vs_identical_bytes() {
@@ -18,7 +18,10 @@ fn test_basefield_vs_identical_bytes() {
     h2.update(bytes);
     let hash2 = h2.digest();
 
-    assert_ne!(hash1, hash2, "Domain tags should separate Fq and Bytes domains");
+    assert_ne!(
+        hash1, hash2,
+        "Domain tags should separate Fq and Bytes domains"
+    );
 }
 
 #[test]
@@ -45,7 +48,10 @@ fn test_i8_minus1_vs_u8_255() {
     h2.update(255u8);
     let hash2 = h2.digest();
 
-    assert_ne!(hash1, hash2, "Type tags should disambiguate I8(-1) vs U8(255)");
+    assert_ne!(
+        hash1, hash2,
+        "Type tags should disambiguate I8(-1) vs U8(255)"
+    );
 }
 
 #[test]
@@ -78,5 +84,8 @@ fn test_curve_infinity_vs_two_zero_basefield() {
     h2.update(ark_pallas::Fq::from(0u64));
     let hash2 = h2.digest();
 
-    assert_ne!(hash1, hash2, "Tags should disambiguate infinity from two zero Fq elements");
+    assert_ne!(
+        hash1, hash2,
+        "Tags should disambiguate infinity from two zero Fq elements"
+    );
 }

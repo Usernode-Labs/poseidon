@@ -36,10 +36,10 @@
 //! let hash = hasher.digest();
 //! ```
 
+use crate::tags::*;
 use ark_ff::PrimeField;
 use std::collections::VecDeque;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::tags::*;
 
 /// Configuration for packing basic Rust types into field elements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -124,7 +124,7 @@ impl RustInput {
     pub fn from_string_slice(s: &str) -> Self {
         Self::Str(s.to_string())
     }
-    
+
     /// Create a RustInput from a byte slice
     pub fn from_bytes(bytes: &[u8]) -> Self {
         Self::ByteSlice(bytes.to_vec())
@@ -132,32 +132,100 @@ impl RustInput {
 }
 
 // Simple From implementations - much cleaner than 17 separate impls!
-impl From<bool> for RustInput { fn from(v: bool) -> Self { Self::Bool(v) } }
-impl From<u8> for RustInput { fn from(v: u8) -> Self { Self::U8(v) } }
-impl From<u16> for RustInput { fn from(v: u16) -> Self { Self::U16(v) } }
-impl From<u32> for RustInput { fn from(v: u32) -> Self { Self::U32(v) } }
-impl From<u64> for RustInput { fn from(v: u64) -> Self { Self::U64(v) } }
-impl From<u128> for RustInput { fn from(v: u128) -> Self { Self::U128(v) } }
-impl From<usize> for RustInput { fn from(v: usize) -> Self { Self::Usize(v) } }
-impl From<i8> for RustInput { fn from(v: i8) -> Self { Self::I8(v) } }
-impl From<i16> for RustInput { fn from(v: i16) -> Self { Self::I16(v) } }
-impl From<i32> for RustInput { fn from(v: i32) -> Self { Self::I32(v) } }
-impl From<i64> for RustInput { fn from(v: i64) -> Self { Self::I64(v) } }
-impl From<i128> for RustInput { fn from(v: i128) -> Self { Self::I128(v) } }
-impl From<isize> for RustInput { fn from(v: isize) -> Self { Self::Isize(v) } }
-impl From<String> for RustInput { fn from(v: String) -> Self { Self::String(v) } }
-impl From<&str> for RustInput { fn from(v: &str) -> Self { Self::Str(v.to_string()) } }
-impl From<Vec<u8>> for RustInput { fn from(v: Vec<u8>) -> Self { Self::Bytes(v) } }
-impl From<&[u8]> for RustInput { fn from(v: &[u8]) -> Self { Self::ByteSlice(v.to_vec()) } }
+impl From<bool> for RustInput {
+    fn from(v: bool) -> Self {
+        Self::Bool(v)
+    }
+}
+impl From<u8> for RustInput {
+    fn from(v: u8) -> Self {
+        Self::U8(v)
+    }
+}
+impl From<u16> for RustInput {
+    fn from(v: u16) -> Self {
+        Self::U16(v)
+    }
+}
+impl From<u32> for RustInput {
+    fn from(v: u32) -> Self {
+        Self::U32(v)
+    }
+}
+impl From<u64> for RustInput {
+    fn from(v: u64) -> Self {
+        Self::U64(v)
+    }
+}
+impl From<u128> for RustInput {
+    fn from(v: u128) -> Self {
+        Self::U128(v)
+    }
+}
+impl From<usize> for RustInput {
+    fn from(v: usize) -> Self {
+        Self::Usize(v)
+    }
+}
+impl From<i8> for RustInput {
+    fn from(v: i8) -> Self {
+        Self::I8(v)
+    }
+}
+impl From<i16> for RustInput {
+    fn from(v: i16) -> Self {
+        Self::I16(v)
+    }
+}
+impl From<i32> for RustInput {
+    fn from(v: i32) -> Self {
+        Self::I32(v)
+    }
+}
+impl From<i64> for RustInput {
+    fn from(v: i64) -> Self {
+        Self::I64(v)
+    }
+}
+impl From<i128> for RustInput {
+    fn from(v: i128) -> Self {
+        Self::I128(v)
+    }
+}
+impl From<isize> for RustInput {
+    fn from(v: isize) -> Self {
+        Self::Isize(v)
+    }
+}
+impl From<String> for RustInput {
+    fn from(v: String) -> Self {
+        Self::String(v)
+    }
+}
+impl From<&str> for RustInput {
+    fn from(v: &str) -> Self {
+        Self::Str(v.to_string())
+    }
+}
+impl From<Vec<u8>> for RustInput {
+    fn from(v: Vec<u8>) -> Self {
+        Self::Bytes(v)
+    }
+}
+impl From<&[u8]> for RustInput {
+    fn from(v: &[u8]) -> Self {
+        Self::ByteSlice(v.to_vec())
+    }
+}
 
 /// Buffer for accumulating bytes before packing into field elements.
-/// 
+///
 /// This buffer may contain sensitive input data and implements `ZeroizeOnDrop`
 /// to ensure that cryptographic material is securely cleared from memory.
 #[derive(Clone)]
 pub struct PackingBuffer {
     /// Accumulated bytes waiting to be packed
-    /// 
+    ///
     /// This may contain sensitive data and will be zeroized on drop.
     bytes: VecDeque<u8>,
     /// Configuration for packing behavior (no sensitive data)
@@ -169,18 +237,19 @@ pub struct PackingBuffer {
 impl PackingBuffer {
     /// Create a new packing buffer for the given field type.
     pub fn new<F: PrimeField>(config: PackingConfig) -> Self {
-        let max_bytes_per_field = config.max_bytes_per_field
+        let max_bytes_per_field = config
+            .max_bytes_per_field
             .unwrap_or_else(|| Self::calculate_max_bytes::<F>());
-            
+
         Self {
             bytes: VecDeque::new(),
             config,
             max_bytes_per_field,
         }
     }
-    
+
     /// Calculate the maximum safe bytes per field element.
-    /// 
+    ///
     /// We use a conservative approach: (field_bit_size - 8) / 8 to ensure
     /// we never exceed the field modulus when packing bytes.
     fn calculate_max_bytes<F: PrimeField>() -> usize {
@@ -189,7 +258,7 @@ impl PackingBuffer {
         let safe_bits = field_bits.saturating_sub(SAFETY_MARGIN_BITS);
         std::cmp::max(safe_bits / 8, 1)
     }
-    
+
     /// Add bytes to the buffer.
     pub fn push_bytes(&mut self, bytes: &[u8]) {
         self.bytes.extend(bytes);
@@ -199,12 +268,12 @@ impl PackingBuffer {
     pub fn push_tag(&mut self, tag: u8) {
         self.bytes.push_back(tag);
     }
-    
+
     /// Add a boolean to the buffer (1 byte: 0x00 or 0x01).
     pub fn push_bool(&mut self, value: bool) {
         self.bytes.push_back(if value { 1u8 } else { 0u8 });
     }
-    
+
     /// Add a string to the buffer with length prefix.
     pub fn push_string(&mut self, s: &str) {
         let bytes = s.as_bytes();
@@ -212,7 +281,7 @@ impl PackingBuffer {
         self.push_varint(bytes.len());
         self.bytes.extend(bytes);
     }
-    
+
     /// Add a variable-length integer (LEB128-style encoding).
     fn push_varint(&mut self, mut value: usize) {
         while value >= 0x80 {
@@ -221,13 +290,13 @@ impl PackingBuffer {
         }
         self.bytes.push_back(value as u8);
     }
-    
+
     /// Extract all complete field elements from the buffer.
-    /// 
+    ///
     /// Returns the field elements and leaves any remaining bytes in the buffer.
     pub fn extract_field_elements<F: PrimeField>(&mut self) -> Vec<F> {
         let mut field_elements = Vec::new();
-        
+
         match self.config.mode {
             PackingMode::ByteEfficient => {
                 // Pack bytes efficiently into field elements
@@ -240,7 +309,7 @@ impl PackingBuffer {
                             break;
                         }
                     }
-                    
+
                     if !chunk.is_empty() {
                         let field_element = F::from_le_bytes_mod_order(&chunk);
                         field_elements.push(field_element);
@@ -258,22 +327,22 @@ impl PackingBuffer {
 
         field_elements
     }
-    
+
     /// Force extraction of all remaining bytes as field elements (with padding if needed).
     pub fn flush_remaining<F: PrimeField>(&mut self) -> Vec<F> {
         if self.bytes.is_empty() {
             return Vec::new();
         }
-        
+
         let mut field_elements = Vec::new();
-        
+
         match self.config.mode {
             PackingMode::ByteEfficient => {
                 // Pack remaining bytes with padding
                 let remaining_bytes: Vec<u8> = self.bytes.drain(..).collect();
                 if !remaining_bytes.is_empty() {
                     let mut padded_bytes = remaining_bytes;
-                    
+
                     match self.config.padding {
                         PaddingMode::Zero => {
                             // Pad with zeros to field size
@@ -289,7 +358,7 @@ impl PackingBuffer {
                             }
                         }
                     }
-                    
+
                     let field_element = F::from_le_bytes_mod_order(&padded_bytes);
                     field_elements.push(field_element);
                 }
@@ -305,9 +374,9 @@ impl PackingBuffer {
 
         field_elements
     }
-    
+
     /// Clear all bytes from the buffer.
-    /// 
+    ///
     /// This method securely zeroizes the buffer contents to prevent sensitive
     /// data from remaining in memory.
     pub fn clear(&mut self) {
@@ -317,16 +386,16 @@ impl PackingBuffer {
         }
         self.bytes.clear();
     }
-    
+
     /// Returns the number of bytes in the buffer.
-    /// 
+    ///
     /// This is primarily for testing and debugging purposes.
     pub fn len(&self) -> usize {
         self.bytes.len()
     }
-    
+
     /// Returns whether the buffer is empty.
-    /// 
+    ///
     /// This is primarily for testing and debugging purposes.
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
@@ -341,21 +410,60 @@ pub fn serialize_rust_input(input: &RustInput, buffer: &mut PackingBuffer) {
             buffer.push_bool(*b)
         }
         // Unsigned integers - direct conversion is safe
-        RustInput::U8(n) => { buffer.push_tag(TAG_U8); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::U16(n) => { buffer.push_tag(TAG_U16); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::U32(n) => { buffer.push_tag(TAG_U32); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::U64(n) => { buffer.push_tag(TAG_U64); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::U128(n) => { buffer.push_tag(TAG_U128); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::Usize(n) => { buffer.push_tag(TAG_USIZE); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::U8(n) => {
+            buffer.push_tag(TAG_U8);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::U16(n) => {
+            buffer.push_tag(TAG_U16);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::U32(n) => {
+            buffer.push_tag(TAG_U32);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::U64(n) => {
+            buffer.push_tag(TAG_U64);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::U128(n) => {
+            buffer.push_tag(TAG_U128);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::Usize(n) => {
+            buffer.push_tag(TAG_USIZE);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
         // Signed integers - preserve bit pattern via to_le_bytes
-        RustInput::I8(n) => { buffer.push_tag(TAG_I8); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::I16(n) => { buffer.push_tag(TAG_I16); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::I32(n) => { buffer.push_tag(TAG_I32); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::I64(n) => { buffer.push_tag(TAG_I64); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::I128(n) => { buffer.push_tag(TAG_I128); buffer.push_bytes(&n.to_le_bytes()) },
-        RustInput::Isize(n) => { buffer.push_tag(TAG_ISIZE); buffer.push_bytes(&n.to_le_bytes()) },
+        RustInput::I8(n) => {
+            buffer.push_tag(TAG_I8);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::I16(n) => {
+            buffer.push_tag(TAG_I16);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::I32(n) => {
+            buffer.push_tag(TAG_I32);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::I64(n) => {
+            buffer.push_tag(TAG_I64);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::I128(n) => {
+            buffer.push_tag(TAG_I128);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
+        RustInput::Isize(n) => {
+            buffer.push_tag(TAG_ISIZE);
+            buffer.push_bytes(&n.to_le_bytes())
+        }
         // Strings and bytes
-        RustInput::String(s) | RustInput::Str(s) => { buffer.push_tag(TAG_STRING); buffer.push_string(s) },
+        RustInput::String(s) | RustInput::Str(s) => {
+            buffer.push_tag(TAG_STRING);
+            buffer.push_string(s)
+        }
         RustInput::Bytes(bytes) | RustInput::ByteSlice(bytes) => {
             buffer.push_tag(TAG_BYTES);
             buffer.push_varint(bytes.len());
@@ -381,62 +489,62 @@ impl Drop for PackingBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_packing_buffer_basic() {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
-        
+
         // Test boolean packing
         buffer.push_bool(true);
         buffer.push_bool(false);
         buffer.push_bool(true);
-        
+
         assert_eq!(buffer.len(), 3);
         assert!(!buffer.is_empty());
     }
-    
+
     #[test]
     fn test_integer_packing() {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
-        
+
         // Test various integer sizes using push_bytes
         buffer.push_bytes(&0u8.to_le_bytes());
         buffer.push_bytes(&255u8.to_le_bytes());
         buffer.push_bytes(&65535u16.to_le_bytes());
-        
+
         // Should have: 1 byte (0) + 1 byte (255) + 2 bytes (65535) = 4 bytes
         assert_eq!(buffer.len(), 4);
     }
-    
+
     #[test]
     fn test_string_packing() {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
-        
+
         buffer.push_string("hello");
-        
+
         // Should have: length prefix (1 byte for "5") + 5 bytes for "hello"
         assert_eq!(buffer.len(), 6);
     }
-    
+
     #[test]
     fn test_field_element_extraction() {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
-        
+
         // Add enough bytes to create field elements
         for i in 0..100u8 {
             buffer.push_bytes(&[i]);
         }
-        
+
         let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>();
         assert!(!field_elements.is_empty());
-        
+
         // Some bytes may or may not remain - that's expected
     }
-    
+
     #[test]
     fn test_circuit_friendly_mode() {
         let config = PackingConfig {
@@ -444,40 +552,40 @@ mod tests {
             ..Default::default()
         };
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
-        
+
         buffer.push_bytes(&[1, 2, 3]);
-        
+
         let field_elements = buffer.extract_field_elements::<ark_pallas::Fq>();
-        
+
         // In circuit-friendly mode, each byte becomes its own field element
         assert_eq!(field_elements.len(), 3);
         assert_eq!(field_elements[0], ark_pallas::Fq::from(1u64));
         assert_eq!(field_elements[1], ark_pallas::Fq::from(2u64));
         assert_eq!(field_elements[2], ark_pallas::Fq::from(3u64));
     }
-    
+
     #[test]
     fn test_rust_input_serialization() {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
-        
+
         serialize_rust_input(&RustInput::Bool(true), &mut buffer);
         serialize_rust_input(&RustInput::U64(12345), &mut buffer);
         serialize_rust_input(&RustInput::String("test".to_string()), &mut buffer);
-        
+
         assert!(!buffer.is_empty());
     }
-    
+
     #[test]
     fn test_flush_remaining() {
         let config = PackingConfig::default();
         let mut buffer = PackingBuffer::new::<ark_pallas::Fq>(config);
-        
+
         // Add a small amount of data
         buffer.push_bytes(&[1, 2, 3]);
-        
+
         let field_elements = buffer.flush_remaining::<ark_pallas::Fq>();
-        
+
         // Should produce exactly one field element with padding
         assert_eq!(field_elements.len(), 1);
         assert_eq!(buffer.len(), 0);

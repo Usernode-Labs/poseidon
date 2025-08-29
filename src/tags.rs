@@ -14,7 +14,6 @@ pub const TAG_CURVE_POINT_INFINITY: u8 = 0x04;
 // Domain context (field-level tag precedes a tagged byte sequence)
 pub const TAG_DOMAIN_CTX: u8 = 0x05;
 
-
 // Primitive types (byte-level tags)
 pub const TAG_BOOL: u8 = 0x10;
 pub const TAG_U8: u8 = 0x11;

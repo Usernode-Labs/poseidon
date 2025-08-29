@@ -1,5 +1,5 @@
-use poseidon_hash::*;
 use poseidon_hash::PoseidonHasher;
+use poseidon_hash::*;
 
 #[test]
 fn test_determinism_across_types() {
@@ -51,8 +51,12 @@ fn test_determinism_mixed_sequence() {
         vec![9u8, 8, 7].into(),
     ];
 
-    for item in &seq { h1.update(item.clone()); }
-    for item in &seq { h2.update(item.clone()); }
+    for item in &seq {
+        h1.update(item.clone());
+    }
+    for item in &seq {
+        h2.update(item.clone());
+    }
 
     assert_eq!(h1.digest(), h2.digest());
 }

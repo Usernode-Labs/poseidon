@@ -2,7 +2,7 @@
 //!
 //! This module provides the core [`MultiFieldHasher`] that can work with any elliptic curve
 //! and automatically handles field conversions between different field types (Fr, Fq, curve points).
-//! 
+//!
 //! ## Features
 //!
 //! - **Safe numeric conversions** - Uses `try_from()` instead of unsafe casts
@@ -23,7 +23,7 @@
 //! use poseidon_hash::parameters::pallas::PALLAS_PARAMS;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> = 
+//! let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> =
 //!     MultiFieldHasher::new_from_ref(&*PALLAS_PARAMS);
 //!     
 //! hasher.update(FieldInput::ScalarField(ark_pallas::Fr::from(42u64)));
@@ -32,15 +32,15 @@
 //! # }
 //! ```
 
-use ark_ff::{PrimeField, BigInteger, Zero};
+use crate::ark_poseidon::ArkPoseidonSponge;
+use crate::primitive::{PackingBuffer, PackingConfig, RustInput, serialize_rust_input};
+use crate::tags::*;
 use ark_crypto_primitives::sponge::{CryptographicSponge, FieldBasedCryptographicSponge};
 use ark_ec::AffineRepr;
+use ark_ff::{BigInteger, PrimeField, Zero};
 use std::marker::PhantomData;
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
-use crate::primitive::{RustInput, PackingBuffer, PackingConfig, serialize_rust_input};
-use crate::tags::*;
-use crate::ark_poseidon::ArkPoseidonSponge;
 
 /// Errors that can occur during hashing operations.
 #[derive(Error, Debug)]
@@ -50,9 +50,9 @@ pub enum HasherError {
     PointConversionFailed,
     /// Numeric conversion failed (overflow or underflow)
     #[error("Numeric conversion failed: {reason}")]
-    NumericConversionFailed { 
+    NumericConversionFailed {
         /// Description of the specific conversion failure
-        reason: String 
+        reason: String,
     },
 }
 
@@ -60,7 +60,7 @@ pub enum HasherError {
 pub type HasherResult<T> = Result<T, HasherError>;
 
 /// Multi-field input types for the generic Poseidon hasher.
-/// 
+///
 /// This enum provides type-safe input handling for different field element types
 /// within the same elliptic curve ecosystem.
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ pub enum FieldInput<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> 
     /// Base field element (Fq) - added directly without conversion
     BaseField(F),
     /// Scalar field element (Fr) - converted to base field representation
-    ScalarField(S), 
+    ScalarField(S),
     /// Curve point in affine representation - coordinates extracted as base field elements
     CurvePoint(G),
     /// Primitive Rust type that needs packing
@@ -76,12 +76,13 @@ pub enum FieldInput<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> 
 }
 
 // Single blanket implementation for all primitive types!
-impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<RustInput>> From<T> for FieldInput<F, S, G> {
+impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<RustInput>> From<T>
+    for FieldInput<F, S, G>
+{
     fn from(value: T) -> Self {
         Self::Primitive(value.into())
     }
 }
-
 
 /// Advanced multi-field Poseidon hasher with sophisticated field conversion capabilities.
 ///
@@ -102,7 +103,7 @@ impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<RustInp
 #[derive(ZeroizeOnDrop)]
 pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> {
     /// Poseidon hasher instance parameterized over the base field F
-    /// 
+    ///
     /// Note: This contains cryptographic parameters that are public and don't need zeroization.
     /// The internal state of the Poseidon hasher may contain sensitive data, but we can't
     /// control its zeroization directly as it's from an external crate.
@@ -111,7 +112,7 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     #[zeroize(skip)]
     base_sponge: ArkPoseidonSponge<F>,
     /// Buffer for accumulating primitive types before packing into field elements
-    /// 
+    ///
     /// This may contain sensitive input data and will be zeroized on drop.
     primitive_buffer: PackingBuffer,
     #[zeroize(skip)]
@@ -165,7 +166,12 @@ struct DirConstants<F: PrimeField + Zero> {
 
 fn derive_lane_constants<F: PrimeField + Zero>(label: &str, rate: usize) -> [F; MAX_RATE] {
     use core::array::from_fn;
-    assert!(rate <= MAX_RATE, "rate {} exceeds MAX_RATE {}", rate, MAX_RATE);
+    assert!(
+        rate <= MAX_RATE,
+        "rate {} exceeds MAX_RATE {}",
+        rate,
+        MAX_RATE
+    );
     from_fn(|i| {
         if i < rate {
             let s = format!("{}|{}", label, i);
@@ -178,7 +184,12 @@ fn derive_lane_constants<F: PrimeField + Zero>(label: &str, rate: usize) -> [F; 
 
 fn derive_domain_tweak<F: PrimeField + Zero>(domain: &[u8], rate: usize) -> [F; MAX_RATE] {
     use core::array::from_fn;
-    assert!(rate <= MAX_RATE, "rate {} exceeds MAX_RATE {}", rate, MAX_RATE);
+    assert!(
+        rate <= MAX_RATE,
+        "rate {} exceeds MAX_RATE {}",
+        rate,
+        MAX_RATE
+    );
     from_fn(|i| {
         if i < rate {
             let mut buf = Vec::with_capacity(12 + domain.len() + 8);
@@ -215,8 +226,11 @@ where
         // that the scalar field does not exceed the base field by bit size.
         // This avoids ambiguous Fr→Fq mappings for unsupported curves.
         if S::MODULUS_BIT_SIZE > F::MODULUS_BIT_SIZE {
-            panic!("Unsupported curve configuration: Fr bit size ({}) exceeds Fq bit size ({}). This library does not support Fr→Fq limb decomposition.",
-                S::MODULUS_BIT_SIZE, F::MODULUS_BIT_SIZE);
+            panic!(
+                "Unsupported curve configuration: Fr bit size ({}) exceeds Fq bit size ({}). This library does not support Fr→Fq limb decomposition.",
+                S::MODULUS_BIT_SIZE,
+                F::MODULUS_BIT_SIZE
+            );
         }
     }
 
@@ -249,7 +263,7 @@ where
             domain_lanes_remaining: 0,
         }
     }
-    
+
     /// Creates a new multi-field hasher from a reference to Poseidon parameters.
     ///
     /// This method clones the parameters internally.
@@ -257,21 +271,24 @@ where
     /// # Arguments
     ///
     /// * `params` - Reference to Poseidon parameters for the base field F
-    pub fn new_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self 
+    pub fn new_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self
     where
         F: Clone,
     {
         Self::assert_scalar_fits_base_field();
         Self::new(crate::parameters::clone_parameters(params))
     }
-    
+
     /// Creates a new multi-field hasher with custom packing configuration.
     ///
     /// # Arguments
     ///
     /// * `params` - Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
-    pub fn new_with_config(params: crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self {
+    pub fn new_with_config(
+        params: crate::ark_poseidon::ArkPoseidonConfig<F>,
+        packing_config: PackingConfig,
+    ) -> Self {
         Self::assert_scalar_fits_base_field();
         let sponge = ArkPoseidonSponge::new(&params);
         Self {
@@ -313,7 +330,10 @@ where
         }
     }
 
-    pub fn new_with_config_dir(params: crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self {
+    pub fn new_with_config_dir(
+        params: crate::ark_poseidon::ArkPoseidonConfig<F>,
+        packing_config: PackingConfig,
+    ) -> Self {
         Self::assert_scalar_fits_base_field();
         let sponge = ArkPoseidonSponge::new(&params);
         let rate = params.rate;
@@ -335,14 +355,17 @@ where
     }
 
     // No longer used: compression chaining replaced by Poseidon sponge
-    
+
     /// Creates a new multi-field hasher with custom packing configuration from parameter reference.
     ///
     /// # Arguments
     ///
     /// * `params` - Reference to Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
-    pub fn new_with_config_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self 
+    pub fn new_with_config_from_ref(
+        params: &crate::ark_poseidon::ArkPoseidonConfig<F>,
+        packing_config: PackingConfig,
+    ) -> Self
     where
         F: Clone,
     {
@@ -350,14 +373,17 @@ where
         Self::new_with_config(crate::parameters::clone_parameters(params), packing_config)
     }
 
-    pub fn new_dir_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self 
+    pub fn new_dir_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self
     where
         F: Clone,
     {
         Self::new_dir(crate::parameters::clone_parameters(params))
     }
 
-    pub fn new_with_config_dir_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self 
+    pub fn new_with_config_dir_from_ref(
+        params: &crate::ark_poseidon::ArkPoseidonConfig<F>,
+        packing_config: PackingConfig,
+    ) -> Self
     where
         F: Clone,
     {
@@ -428,7 +454,10 @@ where
         let fr_bits = S::MODULUS_BIT_SIZE;
         let fq_bits = F::MODULUS_BIT_SIZE;
         if fr_bits > fq_bits {
-            panic!("Unsupported curve configuration encountered at runtime: Fr bit size ({}) exceeds Fq bit size ({}).", fr_bits, fq_bits);
+            panic!(
+                "Unsupported curve configuration encountered at runtime: Fr bit size ({}) exceeds Fq bit size ({}).",
+                fr_bits, fq_bits
+            );
         }
         let bytes = element.into_bigint().to_bytes_le();
         let converted = F::from_le_bytes_mod_order(&bytes);
@@ -509,7 +538,6 @@ where
             }
         }
     }
-    
 
     /// Finalizes via sponge: clones internal sponge, absorbs remaining primitives, squeezes one element.
     pub fn digest(&mut self) -> F {
@@ -522,28 +550,27 @@ where
         sponge.squeeze_native_field_elements(1)[0]
     }
 
-
     /// Consume the hasher and return the final hash result.
-    /// 
+    ///
     /// This is equivalent to `digest()` but takes ownership of the hasher,
     /// ensuring it cannot be used again and triggering automatic cleanup via `ZeroizeOnDrop`.
     /// Useful when you want to guarantee the hasher is consumed after getting the final result.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The final hash of all added elements.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// # use poseidon_hash::PallasHasher;
     /// # use poseidon_hash::PoseidonHasher;
     /// # fn main() {
     /// let mut hasher = PallasHasher::new();
-    /// 
+    ///
     /// hasher.update(42u64);
     /// hasher.update(100u64);
-    /// 
+    ///
     /// let final_hash = hasher.finalize();  // hasher is consumed here
     /// // hasher can no longer be used
     /// # }
@@ -557,7 +584,7 @@ where
     }
 
     /// Resets the hasher state without changing parameters.
-    /// 
+    ///
     /// This method securely clears all sensitive data from memory using zeroization.
     pub fn reset(&mut self) {
         self.sponge = self.base_sponge.clone();
@@ -576,7 +603,13 @@ where
 }
 
 #[derive(Clone, Copy, Debug)]
-enum DirClass { Base, Scalar, CurveFinite, CurveInfinity, Primitive }
+enum DirClass {
+    Base,
+    Scalar,
+    CurveFinite,
+    CurveInfinity,
+    Primitive,
+}
 
 impl<F, S, G> MultiFieldHasher<F, S, G>
 where
@@ -606,7 +639,9 @@ where
             if let Some(dom) = self.pending_domain.as_ref() {
                 let should_apply_now = if self.pending_domain_at_block_start {
                     lane == 0
-                } else { true };
+                } else {
+                    true
+                };
 
                 if should_apply_now && self.domain_lanes_remaining > 0 {
                     v += dom[lane];
@@ -630,41 +665,41 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{PallasHasher, PallasInput, BN254Hasher, BN254Input, PoseidonHasher};
+    use crate::types::{BN254Hasher, BN254Input, PallasHasher, PallasInput, PoseidonHasher};
     use ark_ec::AffineRepr;
 
     #[test]
     fn test_embedded_parameters_basic() {
         let mut hasher = PallasHasher::new();
-        
+
         let a = ark_pallas::Fq::from(1u64);
         let b = ark_pallas::Fq::from(2u64);
-        
+
         // Old way still works
         hasher.update(PallasInput::BaseField(a));
         hasher.update(PallasInput::BaseField(b));
-        
+
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
-    
+
     #[test]
     fn test_from_implementations() {
         let mut hasher = PallasHasher::new();
-        
+
         // New way - much cleaner!
         hasher.update(ark_pallas::Fq::from(1u64));
         hasher.update(ark_pallas::Fr::from(2u64));
         hasher.update(ark_pallas::Affine::generator());
-        
+
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
-    
+
     #[test]
     fn test_unified_update_api() {
         let mut hasher = PallasHasher::new();
-        
+
         // Everything through a single update method - this is the dream API!
         hasher.update(ark_pallas::Fq::from(1u64));
         hasher.update(ark_pallas::Fr::from(2u64));
@@ -673,11 +708,11 @@ mod tests {
         hasher.update(42u64);
         hasher.update("hello");
         hasher.update(vec![1u8, 2, 3]);
-        
+
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
-    
+
     #[test]
     fn test_api_comparison() {
         // Manual enum construction (still works)
@@ -685,32 +720,32 @@ mod tests {
         explicit_style.update(PallasInput::ScalarField(ark_pallas::Fr::from(42u64)));
         explicit_style.update(PallasInput::Primitive(RustInput::Bool(true)));
         explicit_style.update(PallasInput::Primitive(RustInput::from_string_slice("test")));
-        
+
         // Clean unified API (recommended)
         let mut unified_style = PallasHasher::new();
-        unified_style.update(ark_pallas::Fr::from(42u64));  // Direct!
-        unified_style.update(true);                         // Natural!  
-        unified_style.update("test");                       // Intuitive!
-        
+        unified_style.update(ark_pallas::Fr::from(42u64)); // Direct!
+        unified_style.update(true); // Natural!  
+        unified_style.update("test"); // Intuitive!
+
         // Both produce the same result
         assert_eq!(explicit_style.digest(), unified_style.digest());
     }
-    
+
     #[test]
     fn test_generic_from_implementations() {
         // Test that generic From implementations work for all curves!
         let mut pallas = crate::types::PallasHasher::new();
         let mut bn254 = crate::types::BN254Hasher::new();
-        
+
         // Same API works for all curves thanks to generic implementations
         pallas.update(42u64);
         pallas.update(true);
         pallas.update("hello");
-        
+
         bn254.update(42u64);
         bn254.update(true);
         bn254.update("hello");
-        
+
         // Different curves produce different hashes for same input
         let pallas_hash = pallas.digest();
         let bn254_hash = bn254.digest();
@@ -721,26 +756,26 @@ mod tests {
     fn test_proper_chaining_with_embedded_params() {
         // Test that chaining works correctly with embedded parameters
         let mut hasher = PallasHasher::new();
-        
+
         let a = ark_pallas::Fr::from(1u64);
         let b = ark_pallas::Fr::from(2u64);
         let c = ark_pallas::Fr::from(3u64);
         let d = ark_pallas::Fr::from(4u64);
-        
+
         hasher.update(PallasInput::ScalarField(a));
         hasher.update(PallasInput::ScalarField(b));
         hasher.update(PallasInput::ScalarField(c));
         hasher.update(PallasInput::ScalarField(d));
-        
+
         let hash_abcd = hasher.digest();
-        
+
         // Hash just the last two elements
         let mut hasher2 = PallasHasher::new();
         hasher2.update(PallasInput::ScalarField(c));
         hasher2.update(PallasInput::ScalarField(d));
-        
+
         let hash_cd = hasher2.digest();
-        
+
         // These should be different due to proper chaining
         assert_ne!(hash_abcd, hash_cd);
     }
@@ -748,15 +783,15 @@ mod tests {
     #[test]
     fn test_multi_field_types() {
         let mut hasher = PallasHasher::new();
-        
+
         let scalar = ark_pallas::Fr::from(42u64);
         let base = ark_pallas::Fq::from(100u64);
         let generator = ark_pallas::Affine::generator();
-        
+
         hasher.update(PallasInput::ScalarField(scalar));
         hasher.update(PallasInput::BaseField(base));
         hasher.update(PallasInput::CurvePoint(generator));
-        
+
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
@@ -766,16 +801,16 @@ mod tests {
         // Each curve hasher has its own embedded parameters
         let mut pallas_hasher = PallasHasher::new();
         let mut bn254_hasher = BN254Hasher::new();
-        
+
         let pallas_scalar = ark_pallas::Fr::from(123u64);
         let bn254_scalar = ark_bn254::Fr::from(123u64);
-        
+
         pallas_hasher.update(PallasInput::ScalarField(pallas_scalar));
         bn254_hasher.update(BN254Input::ScalarField(bn254_scalar));
-        
+
         let pallas_hash = pallas_hasher.digest();
         let bn254_hash = bn254_hasher.digest();
-        
+
         // These should be different because they use different parameters
         assert_ne!(pallas_hash.to_string(), bn254_hash.to_string());
     }
@@ -784,59 +819,61 @@ mod tests {
     fn test_default_constructor() {
         // Test that Default trait works for convenient initialization
         let mut hasher: PallasHasher = Default::default();
-        
+
         hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
         let hash = hasher.digest();
-        
+
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
 
     #[test]
     fn test_hasher_reuse() {
         let mut hasher = PallasHasher::new();
-        
+
         // First hash
         hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64)));
         let hash1 = hasher.digest();
-        
+
         // Second hash (now includes both elements since digest preserves state)
         hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64)));
         let hash2 = hasher.digest();
-        
+
         // Should be different because hash2 contains both elements
         assert_ne!(hash1, hash2);
     }
 
-
     #[test]
     fn test_digest_preserves_state_and_finalize() {
         let mut hasher = PallasHasher::new();
-        
+
         // Add some data
         hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
-        
+
         // Get hash - state should be preserved
         let first_hash = hasher.digest();
         assert_ne!(first_hash, ark_pallas::Fq::zero());
-        
+
         // State should be preserved - element count should be > 0
-        assert!(hasher.element_count() > 0, "State was not preserved after digest");
-        
+        assert!(
+            hasher.element_count() > 0,
+            "State was not preserved after digest"
+        );
+
         // Add more data
         hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(100u64)));
-        
+
         // Second digest should be different (contains both elements)
         let second_hash = hasher.digest();
         assert_ne!(first_hash, second_hash);
-        
+
         // State should still be preserved
         assert!(hasher.element_count() > 0, "State was cleared after digest");
-        
+
         // Test finalize (consumes hasher)
         let mut hasher2 = PallasHasher::new();
         hasher2.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
         let finalized = hasher2.finalize();
-        
+
         // Should match the first hash (same single input)
         assert_eq!(first_hash, finalized);
     }

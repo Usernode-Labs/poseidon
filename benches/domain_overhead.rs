@@ -1,6 +1,6 @@
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use poseidon_hash::*;
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use poseidon_hash::PoseidonHasher;
+use poseidon_hash::*;
 
 fn compress2_with_domain(domain: &str, a: ark_pallas::Fq, b: ark_pallas::Fq) -> ark_pallas::Fq {
     let mut h = PallasHasher::new_with_domain(domain);
@@ -25,7 +25,11 @@ fn bench_domain_overhead(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("baseline_no_domain", 2), |bch| {
         bch.iter_batched(
             || PallasHasher::new(),
-            |mut h| { h.update(a); h.update(b); let _ = h.finalize(); },
+            |mut h| {
+                h.update(a);
+                h.update(b);
+                let _ = h.finalize();
+            },
             BatchSize::SmallInput,
         );
     });
@@ -34,7 +38,11 @@ fn bench_domain_overhead(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("dir_baseline_no_domain", 2), |bch| {
         bch.iter_batched(
             || PallasHasher::new_dir(),
-            |mut h| { h.update(a); h.update(b); let _ = h.finalize(); },
+            |mut h| {
+                h.update(a);
+                h.update(b);
+                let _ = h.finalize();
+            },
             BatchSize::SmallInput,
         );
     });
@@ -47,7 +55,12 @@ fn bench_domain_overhead(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new(&format!("dir_{}", label), 2), |bch| {
             bch.iter_batched(
                 || PallasHasher::new_with_domain_dir(dom.as_str()),
-                |mut h| { let mut hh = h; hh.update(a); hh.update(b); let _ = hh.finalize(); },
+                |mut h| {
+                    let mut hh = h;
+                    hh.update(a);
+                    hh.update(b);
+                    let _ = hh.finalize();
+                },
                 BatchSize::SmallInput,
             );
         });

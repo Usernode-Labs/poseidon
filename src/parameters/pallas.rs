@@ -74,4 +74,3 @@ mod tests {
         assert_eq!(params.alpha, 5);
     }
 }
-

@@ -3,9 +3,9 @@
 //! This module contains cryptographically secure parameters generated using
 //! the official Poseidon reference implementation with 128-bit security level.
 
-use ark_ff::PrimeField;
 use crate::ark_poseidon::ArkPoseidonConfig;
 use ark_crypto_primitives::sponge::poseidon::traits::find_poseidon_ark_and_mds;
+use ark_ff::PrimeField;
 
 /// Security level in bits for all parameter sets
 pub const SECURITY_LEVEL: u32 = 128;
@@ -18,11 +18,11 @@ pub const STATE_SIZE: usize = 3;
 pub const ALPHA: u64 = 5;
 
 // Submodules for each curve's parameters
+pub mod bls12_377;
+pub mod bls12_381;
+pub mod bn254;
 pub mod pallas;
 pub mod vesta;
-pub mod bn254;
-pub mod bls12_381;
-pub mod bls12_377;
 
 /// Helper to create Poseidon sponge config from embedded constants
 pub fn create_parameters<F: PrimeField>(
@@ -40,13 +40,19 @@ pub fn create_parameters<F: PrimeField>(
     for chunk in ark_flat.chunks(t) {
         ark.push(chunk.to_vec());
     }
-    assert_eq!(ark.len(), full_rounds + partial_rounds, "ARK length mismatch");
+    assert_eq!(
+        ark.len(),
+        full_rounds + partial_rounds,
+        "ARK length mismatch"
+    );
 
     ArkPoseidonConfig::new(full_rounds, partial_rounds, ALPHA, mds, ark, r, c)
 }
 
 /// Clone Poseidon sponge config (PoseidonConfig doesn't implement Clone generically)
-pub fn clone_parameters<F: PrimeField + Clone>(params: &ArkPoseidonConfig<F>) -> ArkPoseidonConfig<F> {
+pub fn clone_parameters<F: PrimeField + Clone>(
+    params: &ArkPoseidonConfig<F>,
+) -> ArkPoseidonConfig<F> {
     ArkPoseidonConfig::new(
         params.full_rounds,
         params.partial_rounds,
@@ -84,7 +90,15 @@ where
     let pr = 56u64; // typical for t=3, alpha=5, 128-bit
     let skip = 0u64;
     let (ark, mds) = find_poseidon_ark_and_mds::<F>(prime_bits, rate, fr, pr, skip);
-    ArkPoseidonConfig::new(fr as usize, pr as usize, ALPHA, mds, ark, rate, STATE_SIZE - rate)
+    ArkPoseidonConfig::new(
+        fr as usize,
+        pr as usize,
+        ALPHA,
+        mds,
+        ark,
+        rate,
+        STATE_SIZE - rate,
+    )
 }
 
 /// Create Poseidon parameters dynamically for arbitrary state size t and round counts.

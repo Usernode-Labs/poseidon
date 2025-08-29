@@ -1,5 +1,5 @@
-use poseidon_hash::types::PallasHasher;
 use poseidon_hash::PoseidonHasher;
+use poseidon_hash::types::PallasHasher;
 
 #[test]
 fn test_different_domains_produce_different_hashes() {

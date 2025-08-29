@@ -1,9 +1,11 @@
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
-use poseidon_hash::*;
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use poseidon_hash::PoseidonHasher;
+use poseidon_hash::*;
 
 fn gen_inputs_pallas(n: usize) -> Vec<ark_pallas::Fq> {
-    (0..n).map(|i| ark_pallas::Fq::from((i as u64).wrapping_mul(0x9E3779B97F4A7C15))).collect()
+    (0..n)
+        .map(|i| ark_pallas::Fq::from((i as u64).wrapping_mul(0x9E3779B97F4A7C15)))
+        .collect()
 }
 
 // Baseline: per-node create hasher, absorb two children with tags, finalize
@@ -31,7 +33,11 @@ fn compress2_dir_new(a: ark_pallas::Fq, b: ark_pallas::Fq) -> ark_pallas::Fq {
     h.finalize()
 }
 
-fn compress2_dir_reuse(h: &mut PallasHasher, a: ark_pallas::Fq, b: ark_pallas::Fq) -> ark_pallas::Fq {
+fn compress2_dir_reuse(
+    h: &mut PallasHasher,
+    a: ark_pallas::Fq,
+    b: ark_pallas::Fq,
+) -> ark_pallas::Fq {
     h.update(a);
     h.update(b);
     let out = h.digest();
@@ -132,48 +138,81 @@ fn bench_compress2(c: &mut Criterion) {
 
 fn bench_merkle_tree_build(c: &mut Criterion) {
     let mut group = c.benchmark_group("merkle_binary_build");
-    for &n_leaves in &[1usize << 8, 1 << 10] { // 256, 1024
+    for &n_leaves in &[1usize << 8, 1 << 10] {
+        // 256, 1024
         let leaves = gen_inputs_pallas(n_leaves);
         group.throughput(Throughput::Elements(n_leaves as u64));
 
-        group.bench_with_input(BenchmarkId::new("new_per_node", n_leaves), &leaves, |b, leaves| {
-            b.iter_batched(|| leaves.clone(), |l| build_merkle_binary_new(&l), BatchSize::SmallInput)
-        });
+        group.bench_with_input(
+            BenchmarkId::new("new_per_node", n_leaves),
+            &leaves,
+            |b, leaves| {
+                b.iter_batched(
+                    || leaves.clone(),
+                    |l| build_merkle_binary_new(&l),
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("reuse_reset", n_leaves), &leaves, |b, leaves| {
-            b.iter_batched(|| leaves.clone(), |l| build_merkle_binary_reuse(&l), BatchSize::SmallInput)
-        });
+        group.bench_with_input(
+            BenchmarkId::new("reuse_reset", n_leaves),
+            &leaves,
+            |b, leaves| {
+                b.iter_batched(
+                    || leaves.clone(),
+                    |l| build_merkle_binary_reuse(&l),
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
         // DiR versions
-        group.bench_with_input(BenchmarkId::new("dir_new_per_node", n_leaves), &leaves, |b, leaves| {
-            b.iter_batched(|| leaves.clone(), |l| {
-                assert!(l.len().is_power_of_two());
-                let mut level = l.clone();
-                while level.len() > 1 {
-                    level = level
-                        .chunks_exact(2)
-                        .map(|c| compress2_dir_new(c[0], c[1]))
-                        .collect();
-                }
-                level[0]
-            }, BatchSize::SmallInput)
-        });
+        group.bench_with_input(
+            BenchmarkId::new("dir_new_per_node", n_leaves),
+            &leaves,
+            |b, leaves| {
+                b.iter_batched(
+                    || leaves.clone(),
+                    |l| {
+                        assert!(l.len().is_power_of_two());
+                        let mut level = l.clone();
+                        while level.len() > 1 {
+                            level = level
+                                .chunks_exact(2)
+                                .map(|c| compress2_dir_new(c[0], c[1]))
+                                .collect();
+                        }
+                        level[0]
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("dir_reuse_reset", n_leaves), &leaves, |b, leaves| {
-            b.iter_batched(|| leaves.clone(), |l| {
-                assert!(l.len().is_power_of_two());
-                let mut level = l.clone();
-                let mut h = PallasHasher::new_with_domain_dir("MERKLE2");
-                while level.len() > 1 {
-                    let mut next = Vec::with_capacity(level.len() / 2);
-                    for c in level.chunks_exact(2) {
-                        next.push(compress2_dir_reuse(&mut h, c[0], c[1]));
-                    }
-                    level = next;
-                }
-                level[0]
-            }, BatchSize::SmallInput)
-        });
+        group.bench_with_input(
+            BenchmarkId::new("dir_reuse_reset", n_leaves),
+            &leaves,
+            |b, leaves| {
+                b.iter_batched(
+                    || leaves.clone(),
+                    |l| {
+                        assert!(l.len().is_power_of_two());
+                        let mut level = l.clone();
+                        let mut h = PallasHasher::new_with_domain_dir("MERKLE2");
+                        while level.len() > 1 {
+                            let mut next = Vec::with_capacity(level.len() / 2);
+                            for c in level.chunks_exact(2) {
+                                next.push(compress2_dir_reuse(&mut h, c[0], c[1]));
+                            }
+                            level = next;
+                        }
+                        level[0]
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
     }
     group.finish();
 }
