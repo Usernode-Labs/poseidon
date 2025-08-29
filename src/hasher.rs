@@ -34,7 +34,6 @@
 
 use crate::ark_poseidon::ArkPoseidonSponge;
 use crate::primitive::{PackingBuffer, PackingConfig, RustInput, serialize_rust_input};
-// field-level tags removed in DiR-only mode; primitive tags are used in primitive.rs
 use ark_crypto_primitives::sponge::{CryptographicSponge, FieldBasedCryptographicSponge};
 use ark_ec::AffineRepr;
 use ark_ff::{BigInteger, PrimeField, Zero};
@@ -84,7 +83,7 @@ impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<RustInp
     }
 }
 
-/// Advanced multi-field Poseidon hasher with sophisticated field conversion capabilities.
+/// Advanced multi-field Poseidon hasher
 ///
 /// This generic hasher can work with any elliptic curve and automatically handles
 /// conversion between different field types within the same curve's ecosystem.
@@ -126,7 +125,7 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     // Poseidon rate (from params)
     #[zeroize(skip)]
     rate: usize,
-    // Current lane cursor within the rate for DiR mode
+    // Current lane cursor within the rate
     #[zeroize(skip)]
     lane_cursor: usize,
     // Domain-in-Rate constants per class
@@ -143,10 +142,7 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     domain_lanes_remaining: usize,
 }
 
-const SAFETY_MARGIN_BITS: usize = 8;
 const MAX_RATE: usize = 12;
-
-// Tagging strategy enum removed: library operates in Domain-in-Rate mode only
 
 #[derive(Debug, Clone)]
 struct DirConstants<F: PrimeField + Zero> {
@@ -155,6 +151,19 @@ struct DirConstants<F: PrimeField + Zero> {
     curve_finite: [F; MAX_RATE],
     curve_infinity: [F; MAX_RATE],
     primitive: [F; MAX_RATE],
+}
+
+impl<F: PrimeField + Zero> DirConstants<F> {
+    #[inline]
+    fn for_class(&self, class: DirClass) -> &[F; MAX_RATE] {
+        match class {
+            DirClass::Base => &self.base,
+            DirClass::Scalar => &self.scalar,
+            DirClass::CurveFinite => &self.curve_finite,
+            DirClass::CurveInfinity => &self.curve_infinity,
+            DirClass::Primitive => &self.primitive,
+        }
+    }
 }
 
 fn derive_lane_constants<F: PrimeField + Zero>(label: &str, rate: usize) -> [F; MAX_RATE] {
@@ -225,14 +234,7 @@ where
         elems: &[F],
         class: DirClass,
     ) -> Vec<F> {
-        let consts = &self.dir_consts;
-        let class_vec = match class {
-            DirClass::Base => &consts.base,
-            DirClass::Scalar => &consts.scalar,
-            DirClass::CurveFinite => &consts.curve_finite,
-            DirClass::CurveInfinity => &consts.curve_infinity,
-            DirClass::Primitive => &consts.primitive,
-        };
+        let class_vec = self.dir_consts.for_class(class);
 
         let mut adjusted: Vec<F> = Vec::with_capacity(elems.len());
         let mut lane_cursor = self.lane_cursor;
@@ -277,11 +279,6 @@ where
         }
     }
 
-    fn max_bytes_per_field() -> usize {
-        let field_bits = F::MODULUS_BIT_SIZE as usize;
-        let safe_bits = field_bits.saturating_sub(SAFETY_MARGIN_BITS);
-        std::cmp::max(safe_bits / 8, 1)
-    }
     /// Creates a new multi-field hasher from Poseidon parameters.
     ///
     /// # Arguments
@@ -351,8 +348,6 @@ where
         }
     }
 
-    // No longer used: compression chaining replaced by Poseidon sponge
-
     /// Creates a new multi-field hasher with custom packing configuration from parameter reference.
     ///
     /// # Arguments
@@ -369,8 +364,6 @@ where
         Self::assert_scalar_fits_base_field();
         Self::new_with_config(crate::parameters::clone_parameters(params), packing_config)
     }
-
-    // DiR-only mode: specialized constructors removed; use new()/new_with_config()
 
     /// Absorb a domain context using Domain-in-Rate lane tweaks.
     /// This namespaces the hasher so identical inputs produce different hashes across domains.
@@ -533,14 +526,7 @@ where
 {
     fn absorb_dir(&mut self, elems: &[F], class: DirClass) {
         // Per-class lane constants
-        let consts = &self.dir_consts;
-        let class_vec = match class {
-            DirClass::Base => &consts.base,
-            DirClass::Scalar => &consts.scalar,
-            DirClass::CurveFinite => &consts.curve_finite,
-            DirClass::CurveInfinity => &consts.curve_infinity,
-            DirClass::Primitive => &consts.primitive,
-        };
+        let class_vec = self.dir_consts.for_class(class);
 
         let mut adjusted: Vec<F> = Vec::with_capacity(elems.len());
         for &e in elems.iter() {
