@@ -76,10 +76,7 @@ pub use primitive::{PackingConfig, PackingMode, PaddingMode, RustInput};
 pub use types::PoseidonHasher;
 
 // Re-export curve-specific hashers and input types
-pub use types::{
-    BLS12_377Hasher, BLS12_377Input, BLS12_381Hasher, BLS12_381Input, BN254Hasher, BN254Input,
-    PallasHasher, PallasInput, VestaHasher, VestaInput,
-};
+pub use types::{BLS12_377Hasher, BLS12_381Hasher, BN254Hasher, PallasHasher, VestaHasher};
 
 // Public modules
 mod ark_poseidon;

@@ -13,7 +13,7 @@ fn test_memory_zeroization() {
     let mut hasher = PallasHasher::new();
 
     let secret_data = ark_pallas::Fr::from(0xDEADBEEFu64);
-    hasher.update(PallasInput::ScalarField(secret_data));
+    hasher.update(secret_data);
 
     let _hash = hasher.digest();
 
@@ -25,10 +25,10 @@ fn test_memory_zeroization() {
 
     // Test finalize() consumes the hasher
     let mut hasher2 = PallasHasher::new();
-    hasher2.update(PallasInput::ScalarField(secret_data));
+    hasher2.update(secret_data);
     let _final_hash = hasher2.finalize(); // hasher2 is consumed here
 
-    hasher.update(PallasInput::ScalarField(secret_data));
+    hasher.update(secret_data);
     assert!(hasher.element_count() > 0, "Data was not added");
 
     hasher.reset();
@@ -78,7 +78,7 @@ fn test_basic_timing_consistency() {
         let mut hasher = PallasHasher::new();
 
         let start = Instant::now();
-        hasher.update(PallasInput::ScalarField(test_case));
+        hasher.update(test_case);
         let _hash = hasher.digest();
         let duration = start.elapsed();
 

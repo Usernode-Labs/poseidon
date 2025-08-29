@@ -41,5 +41,5 @@ fn main() {
     println!("  Hash: {}", bls381_hash);
 
     println!("\n✨ Notice how clean and consistent the API is across all curves!");
-    println!("   No more verbose PallasInput::ScalarField(...) constructions needed!");
+    println!("   No more verbose enum-wrapping needed!");
 }

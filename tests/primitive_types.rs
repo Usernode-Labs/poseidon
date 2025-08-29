@@ -117,9 +117,9 @@ fn test_mixed_field_and_primitive_types() {
     let scalar = ark_pallas::Fr::from(100u64);
     let base = ark_pallas::Fq::from(200u64);
 
-    hasher.update(PallasInput::ScalarField(scalar));
+    hasher.update(scalar);
     hasher.update(300u64);
-    hasher.update(PallasInput::BaseField(base));
+    hasher.update(base);
     hasher.update("mixed");
 
     let hash = hasher.digest();

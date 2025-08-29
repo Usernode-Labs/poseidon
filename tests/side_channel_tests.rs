@@ -31,7 +31,7 @@ fn test_timing_consistency_field_elements() {
             let mut hasher = PallasHasher::new();
 
             let start = Instant::now();
-            hasher.update(PallasInput::ScalarField(*test_case));
+            hasher.update(*test_case);
             let _hash = hasher.digest();
             let elapsed = start.elapsed();
 

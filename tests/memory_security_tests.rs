@@ -13,19 +13,19 @@ fn test_zeroization_implementation() {
     let mut hasher = PallasHasher::new();
 
     let test_scalar = ark_pallas::Fr::from(0x123456789ABCDEFu64);
-    hasher.update(PallasInput::ScalarField(test_scalar));
+    hasher.update(test_scalar);
 
     hasher.update("sensitive_data");
     hasher.update(vec![1, 2, 3, 4, 5]);
 
     let hash1 = hasher.digest();
 
-    hasher.update(PallasInput::ScalarField(ark_pallas::Fr::from(999u64)));
+    hasher.update(ark_pallas::Fr::from(999u64));
     let hash2 = hasher.digest();
 
     assert_ne!(hash1, hash2);
 
-    hasher.update(PallasInput::ScalarField(test_scalar));
+    hasher.update(test_scalar);
     hasher.reset();
 
     assert_eq!(hasher.element_count(), 0);
@@ -50,7 +50,7 @@ fn test_concurrent_zeroization() {
         let mut hasher = PallasHasher::new();
 
         let sensitive_data = ark_pallas::Fr::from(0xFEEDFACECAFEBABEu64);
-        hasher.update(PallasInput::ScalarField(sensitive_data));
+        hasher.update(sensitive_data);
 
         let _hash = hasher.digest();
 

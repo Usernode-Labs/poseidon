@@ -565,7 +565,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{BN254Hasher, BN254Input, PallasHasher, PallasInput, PoseidonHasher};
+    use crate::parameters::pallas::PALLAS_PARAMS;
+    use crate::types::{BN254Hasher, PallasHasher, PoseidonHasher};
+    use ark_crypto_primitives::sponge::CryptographicSponge;
     use ark_ec::AffineRepr;
 
     #[test]
@@ -576,8 +578,8 @@ mod tests {
         let b = ark_pallas::Fq::from(2u64);
 
         // Old way still works
-        hasher.update(PallasInput::BaseField(a));
-        hasher.update(PallasInput::BaseField(b));
+        hasher.update(a);
+        hasher.update(b);
 
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
@@ -617,9 +619,9 @@ mod tests {
     fn test_api_comparison() {
         // Manual enum construction (still works)
         let mut explicit_style = PallasHasher::new();
-        explicit_style.update(PallasInput::ScalarField(ark_pallas::Fr::from(42u64)));
-        explicit_style.update(PallasInput::Primitive(RustInput::Bool(true)));
-        explicit_style.update(PallasInput::Primitive(RustInput::from_string_slice("test")));
+        explicit_style.update(ark_pallas::Fr::from(42u64));
+        explicit_style.update(true);
+        explicit_style.update("test");
 
         // Clean unified API (recommended)
         let mut unified_style = PallasHasher::new();
@@ -662,17 +664,17 @@ mod tests {
         let c = ark_pallas::Fr::from(3u64);
         let d = ark_pallas::Fr::from(4u64);
 
-        hasher.update(PallasInput::ScalarField(a));
-        hasher.update(PallasInput::ScalarField(b));
-        hasher.update(PallasInput::ScalarField(c));
-        hasher.update(PallasInput::ScalarField(d));
+        hasher.update(a);
+        hasher.update(b);
+        hasher.update(c);
+        hasher.update(d);
 
         let hash_abcd = hasher.digest();
 
         // Hash just the last two elements
         let mut hasher2 = PallasHasher::new();
-        hasher2.update(PallasInput::ScalarField(c));
-        hasher2.update(PallasInput::ScalarField(d));
+        hasher2.update(c);
+        hasher2.update(d);
 
         let hash_cd = hasher2.digest();
 
@@ -688,9 +690,9 @@ mod tests {
         let base = ark_pallas::Fq::from(100u64);
         let generator = ark_pallas::Affine::generator();
 
-        hasher.update(PallasInput::ScalarField(scalar));
-        hasher.update(PallasInput::BaseField(base));
-        hasher.update(PallasInput::CurvePoint(generator));
+        hasher.update(scalar);
+        hasher.update(base);
+        hasher.update(generator);
 
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
@@ -705,8 +707,8 @@ mod tests {
         let pallas_scalar = ark_pallas::Fr::from(123u64);
         let bn254_scalar = ark_bn254::Fr::from(123u64);
 
-        pallas_hasher.update(PallasInput::ScalarField(pallas_scalar));
-        bn254_hasher.update(BN254Input::ScalarField(bn254_scalar));
+        pallas_hasher.update(pallas_scalar);
+        bn254_hasher.update(bn254_scalar);
 
         let pallas_hash = pallas_hasher.digest();
         let bn254_hash = bn254_hasher.digest();
@@ -720,7 +722,7 @@ mod tests {
         // Test that Default trait works for convenient initialization
         let mut hasher: PallasHasher = Default::default();
 
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
+        hasher.update(ark_pallas::Fq::from(42u64));
         let hash = hasher.digest();
 
         assert_ne!(hash, ark_pallas::Fq::zero());
@@ -731,11 +733,11 @@ mod tests {
         let mut hasher = PallasHasher::new();
 
         // First hash
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64)));
+        hasher.update(ark_pallas::Fq::from(1u64));
         let hash1 = hasher.digest();
 
         // Second hash (now includes both elements since digest preserves state)
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64)));
+        hasher.update(ark_pallas::Fq::from(2u64));
         let hash2 = hasher.digest();
 
         // Should be different because hash2 contains both elements
@@ -747,7 +749,7 @@ mod tests {
         let mut hasher = PallasHasher::new();
 
         // Add some data
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
+        hasher.update(ark_pallas::Fq::from(42u64));
 
         // Get hash - state should be preserved
         let first_hash = hasher.digest();
@@ -760,7 +762,7 @@ mod tests {
         );
 
         // Add more data
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(100u64)));
+        hasher.update(ark_pallas::Fq::from(100u64));
 
         // Second digest should be different (contains both elements)
         let second_hash = hasher.digest();
@@ -771,10 +773,68 @@ mod tests {
 
         // Test finalize (consumes hasher)
         let mut hasher2 = PallasHasher::new();
-        hasher2.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
+        hasher2.update(ark_pallas::Fq::from(42u64));
         let finalized = hasher2.finalize();
 
         // Should match the first hash (same single input)
         assert_eq!(first_hash, finalized);
+    }
+
+    #[test]
+    fn test_dir_domain_tweak_applies_one_block_at_start() {
+        let params = &*PALLAS_PARAMS;
+        let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> =
+            MultiFieldHasher::new_from_ref(params);
+
+        hasher.absorb_domain(b"D1");
+        let r = params.rate;
+        let elems: Vec<ark_pallas::Fq> = (0..r as u64).map(ark_pallas::Fq::from).collect();
+
+        // Expected: use the hasher's own adjustment logic without mutating state
+        let adjusted = hasher.compute_domain_in_rate_adjusted_elements_without_mutating_state(
+            &elems,
+            DirClass::Base,
+        );
+
+        // Clone current sponge state and absorb adjusted sequence
+        let mut expected = hasher.sponge.clone();
+        expected.absorb(&adjusted);
+        let expected_hash = expected.squeeze_native_field_elements(1)[0];
+
+        let mut h2 = hasher;
+        for &e in &elems {
+            h2.update(FieldInput::BaseField(e));
+        }
+        assert_eq!(expected_hash, h2.finalize());
+    }
+
+    #[test]
+    fn test_dir_domain_tweak_after_partial_block_alignment() {
+        let params = &*PALLAS_PARAMS;
+        let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> =
+            MultiFieldHasher::new_from_ref(params);
+        let r = params.rate;
+
+        // Advance mid-block by 1
+        hasher.update(FieldInput::BaseField(ark_pallas::Fq::from(99u64)));
+        hasher.absorb_domain(b"D2");
+
+        let elems: Vec<ark_pallas::Fq> = (0..r as u64).map(ark_pallas::Fq::from).collect();
+
+        let adjusted = hasher.compute_domain_in_rate_adjusted_elements_without_mutating_state(
+            &elems,
+            DirClass::Base,
+        );
+
+        // Clone current sponge state (already contains the pre element)
+        let mut expected = hasher.sponge.clone();
+        expected.absorb(&adjusted);
+        let expected_hash = expected.squeeze_native_field_elements(1)[0];
+
+        let mut h2 = hasher;
+        for &e in &elems {
+            h2.update(FieldInput::BaseField(e));
+        }
+        assert_eq!(expected_hash, h2.finalize());
     }
 }

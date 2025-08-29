@@ -44,7 +44,7 @@ fn test_determinism_mixed_sequence() {
     let mut h1 = PallasHasher::new();
     let mut h2 = PallasHasher::new();
 
-    let seq: Vec<PallasInput> = vec![
+    let seq: Vec<poseidon_hash::FieldInput<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>> = vec![
         42u64.into(),
         true.into(),
         "abc".to_string().into(),

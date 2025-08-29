@@ -53,7 +53,7 @@ fn main() {
     // Mix field elements and primitive types
     println!("\n🌊 Mixing field elements and primitive types:");
     let scalar = ark_pallas::Fr::from(42u64);
-    hasher.update(PallasInput::ScalarField(scalar));
+    hasher.update(scalar);
     hasher.update(100u64);
     hasher.update("mixed types");
 

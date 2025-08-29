@@ -136,7 +136,7 @@ fn test_field_element_patterns() {
     ];
 
     for field_element in field_test_cases.iter() {
-        hasher.update(PallasInput::ScalarField(*field_element));
+        hasher.update(*field_element);
     }
 
     let _hash = hasher.digest();
@@ -159,7 +159,7 @@ fn test_curve_point_fuzzing() {
     ];
 
     for point in point_test_cases.iter() {
-        hasher.update(PallasInput::CurvePoint(*point));
+        hasher.update(*point);
     }
 
     let _hash = hasher.digest();
@@ -205,7 +205,7 @@ fn test_mixed_input_fuzzing() {
                 }
                 5 => {
                     let field_element = ark_pallas::Fr::from(seed);
-                    hasher.update(PallasInput::ScalarField(field_element));
+                    hasher.update(field_element);
                 }
                 _ => hasher.update(seed),
             };

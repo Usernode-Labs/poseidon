@@ -69,7 +69,7 @@ where
 // Macro to define curve-specific hasher types and impls
 macro_rules! define_curve_hasher {
     (
-        $Hasher:ident, $Input:ident,
+        $Hasher:ident,
         fq = $fq:path,
         fr = $fr:path,
         affine = $aff:path,
@@ -80,7 +80,7 @@ macro_rules! define_curve_hasher {
             inner: MultiFieldHasher<$fq, $fr, $aff>,
         }
 
-        impl PoseidonHasher<$fq, $Input> for $Hasher {
+        impl PoseidonHasher<$fq, FieldInput<$fq, $fr, $aff>> for $Hasher {
             fn new() -> Self {
                 Self {
                     inner: MultiFieldHasher::new_from_ref(&$params),
@@ -94,7 +94,7 @@ macro_rules! define_curve_hasher {
             }
 
             #[inline]
-            fn update_field_input(&mut self, input: $Input) {
+            fn update_field_input(&mut self, input: FieldInput<$fq, $fr, $aff>) {
                 self.inner.update(input)
             }
             #[inline]
@@ -113,22 +113,21 @@ macro_rules! define_curve_hasher {
 
         impl Default for $Hasher {
             fn default() -> Self {
-                <Self as PoseidonHasher<$fq, $Input>>::new()
+                <Self as PoseidonHasher<$fq, FieldInput<$fq, $fr, $aff>>>::new()
             }
         }
 
-        pub type $Input = FieldInput<$fq, $fr, $aff>;
-        impl From<$fq> for $Input {
+        impl From<$fq> for FieldInput<$fq, $fr, $aff> {
             fn from(v: $fq) -> Self {
                 Self::BaseField(v)
             }
         }
-        impl From<$fr> for $Input {
+        impl From<$fr> for FieldInput<$fq, $fr, $aff> {
             fn from(v: $fr) -> Self {
                 Self::ScalarField(v)
             }
         }
-        impl From<$aff> for $Input {
+        impl From<$aff> for FieldInput<$fq, $fr, $aff> {
             fn from(v: $aff) -> Self {
                 Self::CurvePoint(v)
             }
@@ -136,13 +135,13 @@ macro_rules! define_curve_hasher {
 
         impl $Hasher {
             pub fn new() -> Self {
-                <Self as PoseidonHasher<$fq, $Input>>::new()
+                <Self as PoseidonHasher<$fq, FieldInput<$fq, $fr, $aff>>>::new()
             }
             pub fn new_with_config(config: PackingConfig) -> Self {
-                <Self as PoseidonHasher<$fq, $Input>>::new_with_config(config)
+                <Self as PoseidonHasher<$fq, FieldInput<$fq, $fr, $aff>>>::new_with_config(config)
             }
             pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
-                let mut h = <Self as PoseidonHasher<$fq, $Input>>::new();
+                let mut h = <Self as PoseidonHasher<$fq, FieldInput<$fq, $fr, $aff>>>::new();
                 h.inner.absorb_domain(domain.as_ref());
                 h
             }
@@ -150,7 +149,10 @@ macro_rules! define_curve_hasher {
                 config: PackingConfig,
                 domain: impl AsRef<[u8]>,
             ) -> Self {
-                let mut h = <Self as PoseidonHasher<$fq, $Input>>::new_with_config(config);
+                let mut h =
+                    <Self as PoseidonHasher<$fq, FieldInput<$fq, $fr, $aff>>>::new_with_config(
+                        config,
+                    );
                 h.inner.absorb_domain(domain.as_ref());
                 h
             }
@@ -162,7 +164,6 @@ macro_rules! define_curve_hasher {
 
 define_curve_hasher!(
     PallasHasher,
-    PallasInput,
     fq = ark_pallas::Fq,
     fr = ark_pallas::Fr,
     affine = ark_pallas::Affine,
@@ -171,7 +172,6 @@ define_curve_hasher!(
 
 define_curve_hasher!(
     VestaHasher,
-    VestaInput,
     fq = ark_vesta::Fq,
     fr = ark_vesta::Fr,
     affine = ark_vesta::Affine,
@@ -215,7 +215,6 @@ impl PallasHasher {
 
 define_curve_hasher!(
     BN254Hasher,
-    BN254Input,
     fq = ark_bn254::Fq,
     fr = ark_bn254::Fr,
     affine = ark_bn254::G1Affine,
@@ -224,7 +223,6 @@ define_curve_hasher!(
 
 define_curve_hasher!(
     BLS12_381Hasher,
-    BLS12_381Input,
     fq = ark_bls12_381::Fq,
     fr = ark_bls12_381::Fr,
     affine = ark_bls12_381::G1Affine,
@@ -233,7 +231,6 @@ define_curve_hasher!(
 
 define_curve_hasher!(
     BLS12_377Hasher,
-    BLS12_377Input,
     fq = ark_bls12_377::Fq,
     fr = ark_bls12_377::Fr,
     affine = ark_bls12_377::G1Affine,
