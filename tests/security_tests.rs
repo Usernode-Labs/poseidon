@@ -48,7 +48,7 @@ fn test_memory_zeroization() {
 /// Validates that field conversion handles large values without overflow.
 #[test]
 fn test_field_conversion_overflow_protection() {
-    use poseidon_hash::hasher::{FieldInput, MultiFieldHasher};
+    use poseidon_hash::hasher::{FieldInput, MultiFieldHasherV1 as MultiFieldHasher};
     use poseidon_hash::parameters::pallas::PALLAS_PARAMS;
 
     let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> =

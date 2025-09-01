@@ -115,7 +115,7 @@ fn test_timing_consistency_data_patterns() {
 #[test]
 #[ignore = "Strict timing test - run with --ignored flag"]
 fn test_field_conversion_timing() {
-    use poseidon_hash::hasher::{FieldInput, MultiFieldHasher};
+    use poseidon_hash::hasher::{FieldInput, MultiFieldHasherV1 as MultiFieldHasher};
     use poseidon_hash::parameters::pallas::PALLAS_PARAMS;
 
     let test_scalars = vec![

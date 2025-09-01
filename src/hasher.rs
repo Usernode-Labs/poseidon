@@ -19,7 +19,7 @@
 //! - Understanding the underlying implementation
 //!
 //! ```rust
-//! use poseidon_hash::hasher::{MultiFieldHasher, FieldInput, HasherResult};
+//! use poseidon_hash::hasher::{MultiFieldHasherV1 as MultiFieldHasher, FieldInput, HasherResult};
 //! use poseidon_hash::parameters::pallas::PALLAS_PARAMS;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,7 +32,7 @@
 //! # }
 //! ```
 
-use crate::ark_poseidon::ArkPoseidonSponge;
+use crate::ark_poseidon::{ArkPoseidon2Sponge, ArkPoseidonSponge};
 use crate::primitive::{PackingBuffer, PackingConfig, PrimitiveInput};
 use ark_crypto_primitives::sponge::{CryptographicSponge, FieldBasedCryptographicSponge};
 use ark_ec::AffineRepr;
@@ -100,16 +100,19 @@ impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<Primiti
 /// * `S: PrimeField` - Scalar field (Fr) used for private keys and discrete logarithms  
 /// * `G: AffineRepr<BaseField = F>` - Curve points in affine representation
 #[derive(ZeroizeOnDrop)]
-pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> {
+pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, SP>
+where
+    SP: CryptographicSponge + FieldBasedCryptographicSponge<F> + Clone,
+{
     /// Poseidon hasher instance parameterized over the base field F
     ///
     /// Note: This contains cryptographic parameters that are public and don't need zeroization.
     /// The internal state of the Poseidon hasher may contain sensitive data, but we can't
     /// control its zeroization directly as it's from an external crate.
     #[zeroize(skip)]
-    sponge: ArkPoseidonSponge<F>,
+    sponge: SP,
     #[zeroize(skip)]
-    base_sponge: ArkPoseidonSponge<F>,
+    base_sponge: SP,
     /// Buffer for accumulating primitive types before packing into field elements
     ///
     /// This may contain sensitive input data and will be zeroized on drop.
@@ -166,6 +169,10 @@ impl<F: PrimeField + Zero> DirConstants<F> {
     }
 }
 
+// Convenient aliases: v1 uses Ark Poseidon (arkworks), v2 uses our Poseidon2.
+pub type MultiFieldHasherV1<F, S, G> = MultiFieldHasher<F, S, G, ArkPoseidonSponge<F>>;
+pub type MultiFieldHasherV2<F, S, G> = MultiFieldHasher<F, S, G, ArkPoseidon2Sponge<F>>;
+
 fn derive_lane_constants<F: PrimeField + Zero>(label: &str, rate: usize) -> [F; MAX_RATE] {
     use core::array::from_fn;
     assert!(
@@ -216,11 +223,12 @@ fn build_dir_constants<F: PrimeField + Zero>(rate: usize) -> DirConstants<F> {
     }
 }
 
-impl<F, S, G> MultiFieldHasher<F, S, G>
+impl<F, S, G, SP> MultiFieldHasher<F, S, G, SP>
 where
     F: PrimeField + Zero + ark_crypto_primitives::sponge::Absorb,
     S: PrimeField,
     G: AffineRepr<BaseField = F>,
+    SP: CryptographicSponge + FieldBasedCryptographicSponge<F> + Clone,
 {
     #[inline]
     /// Compute Domain-in-Rate adjusted elements without mutating hasher state.
@@ -284,10 +292,13 @@ where
     /// # Arguments
     ///
     /// * `params` - Poseidon parameters for the base field F
-    pub fn new(params: crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self {
+    pub fn new(params: <SP as CryptographicSponge>::Config) -> Self
+    where
+        <SP as CryptographicSponge>::Config: SpongeParams,
+    {
         Self::assert_scalar_fits_base_field();
-        let sponge = ArkPoseidonSponge::new(&params);
-        let rate = params.rate;
+        let sponge = SP::new(&params);
+        let rate = SpongeParams::rate(&params);
         Self {
             base_sponge: sponge.clone(),
             sponge,
@@ -311,12 +322,12 @@ where
     /// # Arguments
     ///
     /// * `params` - Reference to Poseidon parameters for the base field F
-    pub fn new_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self
+    pub fn new_from_ref(params: &<SP as CryptographicSponge>::Config) -> Self
     where
-        F: Clone,
+        <SP as CryptographicSponge>::Config: Clone + SpongeParams,
     {
         Self::assert_scalar_fits_base_field();
-        Self::new(crate::parameters::clone_parameters(params))
+        Self::new(params.clone())
     }
 
     /// Creates a new multi-field hasher with custom packing configuration.
@@ -326,12 +337,15 @@ where
     /// * `params` - Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
     pub fn new_with_config(
-        params: crate::ark_poseidon::ArkPoseidonConfig<F>,
+        params: <SP as CryptographicSponge>::Config,
         packing_config: PackingConfig,
-    ) -> Self {
+    ) -> Self
+    where
+        <SP as CryptographicSponge>::Config: SpongeParams,
+    {
         Self::assert_scalar_fits_base_field();
-        let sponge = ArkPoseidonSponge::new(&params);
-        let rate = params.rate;
+        let sponge = SP::new(&params);
+        let rate = SpongeParams::rate(&params);
         Self {
             base_sponge: sponge.clone(),
             sponge,
@@ -355,14 +369,14 @@ where
     /// * `params` - Reference to Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
     pub fn new_with_config_from_ref(
-        params: &crate::ark_poseidon::ArkPoseidonConfig<F>,
+        params: &<SP as CryptographicSponge>::Config,
         packing_config: PackingConfig,
     ) -> Self
     where
-        F: Clone,
+        <SP as CryptographicSponge>::Config: Clone + SpongeParams,
     {
         Self::assert_scalar_fits_base_field();
-        Self::new_with_config(crate::parameters::clone_parameters(params), packing_config)
+        Self::new_with_config(params.clone(), packing_config)
     }
 
     /// Absorb a domain context using Domain-in-Rate lane tweaks.
@@ -519,11 +533,12 @@ enum DirClass {
     Primitive,
 }
 
-impl<F, S, G> MultiFieldHasher<F, S, G>
+impl<F, S, G, SP> MultiFieldHasher<F, S, G, SP>
 where
     F: PrimeField + Zero + ark_crypto_primitives::sponge::Absorb,
     S: PrimeField,
     G: AffineRepr<BaseField = F>,
+    SP: CryptographicSponge + FieldBasedCryptographicSponge<F> + Clone,
 {
     fn absorb_dir(&mut self, elems: &[F], class: DirClass) {
         // Per-class lane constants
@@ -560,6 +575,25 @@ where
         }
         self.sponge.absorb(&adjusted);
         self.count += adjusted.len();
+    }
+}
+
+// Small helper trait to get sponge rate from config generically.
+pub trait SpongeParams {
+    fn rate(&self) -> usize;
+}
+
+impl<F: PrimeField> SpongeParams for ark_crypto_primitives::sponge::poseidon::PoseidonConfig<F> {
+    #[inline]
+    fn rate(&self) -> usize {
+        self.rate
+    }
+}
+
+impl<F: PrimeField> SpongeParams for crate::poseidon2::PoseidonConfig<F> {
+    #[inline]
+    fn rate(&self) -> usize {
+        self.rate
     }
 }
 
@@ -784,8 +818,11 @@ mod tests {
     #[test]
     fn test_dir_domain_tweak_applies_one_block_at_start() {
         let params = &*PALLAS_PARAMS;
-        let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> =
-            MultiFieldHasher::new_from_ref(params);
+        let mut hasher: super::MultiFieldHasherV1<
+            ark_pallas::Fq,
+            ark_pallas::Fr,
+            ark_pallas::Affine,
+        > = super::MultiFieldHasherV1::new_from_ref(params);
 
         hasher.absorb_domain(b"D1");
         let r = params.rate;
@@ -812,8 +849,11 @@ mod tests {
     #[test]
     fn test_dir_domain_tweak_after_partial_block_alignment() {
         let params = &*PALLAS_PARAMS;
-        let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> =
-            MultiFieldHasher::new_from_ref(params);
+        let mut hasher: super::MultiFieldHasherV1<
+            ark_pallas::Fq,
+            ark_pallas::Fr,
+            ark_pallas::Affine,
+        > = super::MultiFieldHasherV1::new_from_ref(params);
         let r = params.rate;
 
         // Advance mid-block by 1

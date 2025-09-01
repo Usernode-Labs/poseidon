@@ -4,7 +4,7 @@
 //! at compile time, ensuring type safety and eliminating the possibility
 //! of using incorrect parameters.
 
-use crate::hasher::{FieldInput, MultiFieldHasher};
+use crate::hasher::{FieldInput, MultiFieldHasherV1};
 use crate::parameters::*;
 use crate::primitive::PackingConfig;
 use ark_ff::PrimeField;
@@ -77,19 +77,19 @@ macro_rules! define_curve_hasher {
     ) => {
         #[derive(ZeroizeOnDrop)]
         pub struct $Hasher {
-            inner: MultiFieldHasher<$fq, $fr, $aff>,
+            inner: MultiFieldHasherV1<$fq, $fr, $aff>,
         }
 
         impl PoseidonHasher<$fq, FieldInput<$fq, $fr, $aff>> for $Hasher {
             fn new() -> Self {
                 Self {
-                    inner: MultiFieldHasher::new_from_ref(&$params),
+                    inner: MultiFieldHasherV1::new_from_ref(&$params),
                 }
             }
 
             fn new_with_config(config: PackingConfig) -> Self {
                 Self {
-                    inner: MultiFieldHasher::new_with_config_from_ref(&$params, config),
+                    inner: MultiFieldHasherV1::new_with_config_from_ref(&$params, config),
                 }
             }
 
@@ -184,7 +184,7 @@ impl PallasHasher {
     pub fn new_variant(variant: crate::parameters::pallas::PallasVariant) -> Self {
         let params = crate::parameters::pallas::pallas_params_for(variant);
         Self {
-            inner: MultiFieldHasher::new_from_ref(params),
+            inner: MultiFieldHasherV1::new_from_ref(params),
         }
     }
 
@@ -195,7 +195,7 @@ impl PallasHasher {
     ) -> Self {
         let params = crate::parameters::pallas::pallas_params_for(variant);
         Self {
-            inner: MultiFieldHasher::new_with_config_from_ref(params, config),
+            inner: MultiFieldHasherV1::new_with_config_from_ref(params, config),
         }
     }
 
@@ -206,7 +206,7 @@ impl PallasHasher {
     ) -> Self {
         let params = crate::parameters::pallas::pallas_params_for(variant);
         let mut h = Self {
-            inner: MultiFieldHasher::new_from_ref(params),
+            inner: MultiFieldHasherV1::new_from_ref(params),
         };
         h.inner.absorb_domain(domain.as_ref());
         h
@@ -236,3 +236,144 @@ define_curve_hasher!(
     affine = ark_bls12_377::G1Affine,
     params = bls12_377::BLS12_377_PARAMS
 );
+
+// Poseidon2-specific types (explicit algorithm/version in the name)
+pub mod poseidon2 {
+    use super::{FieldInput, PoseidonHasher};
+    use crate::ark_poseidon::ArkPoseidon2Sponge;
+    use crate::hasher::MultiFieldHasherV2;
+    use crate::parameters::poseidon2_pallas::{
+        PALLAS_POSEIDON2_PARAMS, PALLAS_POSEIDON2_PARAMS_T4,
+    };
+    use crate::primitive::PackingConfig;
+    use ark_crypto_primitives::sponge::CryptographicSponge;
+
+    pub struct PallasPoseidon2Hasher {
+        inner: MultiFieldHasherV2<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>,
+    }
+
+    impl
+        PoseidonHasher<
+            ark_pallas::Fq,
+            FieldInput<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>,
+        > for PallasPoseidon2Hasher
+    {
+        fn new() -> Self {
+            Self {
+                inner: MultiFieldHasherV2::new_from_ref(&*PALLAS_POSEIDON2_PARAMS),
+            }
+        }
+
+        fn new_with_config(config: PackingConfig) -> Self {
+            Self {
+                inner: MultiFieldHasherV2::new_with_config_from_ref(
+                    &*PALLAS_POSEIDON2_PARAMS,
+                    config,
+                ),
+            }
+        }
+
+        fn update_field_input(
+            &mut self,
+            input: FieldInput<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>,
+        ) {
+            self.inner.update(input)
+        }
+        fn digest_result(&mut self) -> ark_pallas::Fq {
+            self.inner.digest()
+        }
+        fn reset_hasher(&mut self) {
+            self.inner.reset()
+        }
+        fn get_element_count(&self) -> usize {
+            self.inner.element_count()
+        }
+    }
+
+    impl Default for PallasPoseidon2Hasher {
+        fn default() -> Self {
+            <Self as super::PoseidonHasher<_, _>>::new()
+        }
+    }
+
+    impl PallasPoseidon2Hasher {
+        pub fn new() -> Self {
+            <Self as super::PoseidonHasher<_, _>>::new()
+        }
+        pub fn new_with_config(config: PackingConfig) -> Self {
+            <Self as super::PoseidonHasher<_, _>>::new_with_config(config)
+        }
+        pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+            let mut h = <Self as super::PoseidonHasher<_, _>>::new();
+            h.inner.absorb_domain(domain.as_ref());
+            h
+        }
+        pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+            let mut h = <Self as super::PoseidonHasher<_, _>>::new_with_config(config);
+            h.inner.absorb_domain(domain.as_ref());
+            h
+        }
+
+        /// Create a Poseidon2 hasher selecting parameters by variant (t).
+        pub fn new_variant(variant: PallasPoseidon2Variant) -> Self {
+            let params = match variant {
+                PallasPoseidon2Variant::T3 => &*PALLAS_POSEIDON2_PARAMS,
+                PallasPoseidon2Variant::T4 => &*PALLAS_POSEIDON2_PARAMS_T4,
+            };
+            Self {
+                inner: MultiFieldHasherV2::new_from_ref(params),
+            }
+        }
+
+        /// Create Poseidon2 hasher with custom packing config and variant.
+        pub fn new_with_config_variant(
+            config: PackingConfig,
+            variant: PallasPoseidon2Variant,
+        ) -> Self {
+            let params = match variant {
+                PallasPoseidon2Variant::T3 => &*PALLAS_POSEIDON2_PARAMS,
+                PallasPoseidon2Variant::T4 => &*PALLAS_POSEIDON2_PARAMS_T4,
+            };
+            Self {
+                inner: MultiFieldHasherV2::new_with_config_from_ref(params, config),
+            }
+        }
+    }
+
+    /// Runtime-selectable Poseidon2 Pallas parameter variants.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum PallasPoseidon2Variant {
+        T3,
+        T4,
+    }
+
+    /// Lightweight Poseidon2 (t=4) compression helper for Pallas.
+    ///
+    /// Exposes a simple 3→1 compression using one permutation with the
+    /// capacity lane set to zero. Accepts inputs convertible into Pallas Fq.
+    pub struct PallasPoseidon2Compress {
+        sponge: ArkPoseidon2Sponge<ark_pallas::Fq>,
+    }
+
+    impl PallasPoseidon2Compress {
+        /// Create a new compressor using t=4 Poseidon2 params for Pallas.
+        pub fn new() -> Self {
+            Self {
+                sponge: ArkPoseidon2Sponge::new(&*PALLAS_POSEIDON2_PARAMS_T4),
+            }
+        }
+
+        /// Compress exactly three inputs into one field element.
+        pub fn compress3<A, B, C>(&self, a: A, b: B, c: C) -> ark_pallas::Fq
+        where
+            A: Into<ark_pallas::Fq>,
+            B: Into<ark_pallas::Fq>,
+            C: Into<ark_pallas::Fq>,
+        {
+            let a: ark_pallas::Fq = a.into();
+            let b: ark_pallas::Fq = b.into();
+            let c: ark_pallas::Fq = c.into();
+            self.sponge.compress_3(a, b, c)
+        }
+    }
+}

@@ -41,6 +41,35 @@ let hash = hasher.digest(); // non-consuming; finalize() consumes
 println!("Hash: {}", hash);
 ```
 
+## Poseidon2 (Pallas)
+
+This crate also exposes a Poseidon2 variant for the Pallas base field (Fq). It
+has the same ergonomic API as the Poseidon v1 hashers and uses the same
+absorb/squeeze sponge construction under the hood.
+
+```rust
+use poseidon_hash::PallasPoseidon2Hasher; // Poseidon2 permutation on Pallas Fq
+use poseidon_hash::PoseidonHasher;        // brings update()/digest() into scope
+
+let mut h = PallasPoseidon2Hasher::new();            // default params (t=3, d=5)
+h.update(ark_pallas::Fq::from(42u64));               // base field
+h.update(ark_pallas::Fr::from(123u64));              // scalar field (converted)
+let out = h.digest();
+
+// Optional domain separation (Domain-in-Rate)
+let mut h2 = PallasPoseidon2Hasher::new_with_domain("MY_DOMAIN");
+h2.update(ark_pallas::Fq::from(1u64));
+let out2 = h2.digest();
+```
+
+Notes
+- The Poseidon2 Pallas hasher mirrors the v1 API (update over base/scalar/points
+  and primitives; digest/reset/finalize; optional domain).
+- Default parameters are derived deterministically (Grain LFSR). A test vector
+  (“KAT”) validates the permutation against the HorizenLabs Poseidon2 Pallas
+  constants when those parameters are supplied.
+- Benchmarks for Poseidon2 are available: `cargo bench --bench simple_hash_poseidon2`.
+
 ## Multi-Curve
 
 ```rust

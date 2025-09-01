@@ -76,12 +76,16 @@ pub use primitive::{PackingConfig, PackingMode, PaddingMode};
 pub use types::PoseidonHasher;
 
 // Re-export curve-specific hashers and input types
+pub use types::poseidon2::{PallasPoseidon2Compress, PallasPoseidon2Hasher};
 pub use types::{BLS12_377Hasher, BLS12_381Hasher, BN254Hasher, PallasHasher, VestaHasher};
 
+// TODO: copied from arkworks, remove once arkworks supports Poseidon2
+mod grain_lfsr;
 // Public modules
 mod ark_poseidon;
 pub mod hasher;
 pub mod parameters;
+mod poseidon2;
 pub mod primitive;
 mod tags;
 pub mod types;
