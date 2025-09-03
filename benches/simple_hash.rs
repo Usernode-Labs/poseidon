@@ -55,9 +55,26 @@ fn bench_simple_hash_reuse_reset(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_simple_hash_minimal(c: &mut Criterion) {
+    // Measures a single digest after absorbing exactly 2 elements (t=3 → rate=2)
+    let mut group = c.benchmark_group("simple_hash_minimal");
+    group.bench_function("pallas_absorb2_digest", |b| {
+        b.iter_batched(
+            || PallasHasher::new_with_domain("MIN"),
+            |mut hasher| {
+                hasher.update(ark_pallas::Fq::from(1u64));
+                hasher.update(ark_pallas::Fq::from(2u64));
+                let _ = hasher.digest();
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    group.finish();
+}
 criterion_group!(
     benches,
     bench_simple_hash_stream,
-    bench_simple_hash_reuse_reset
+    bench_simple_hash_reuse_reset,
+    bench_simple_hash_minimal
 );
 criterion_main!(benches);

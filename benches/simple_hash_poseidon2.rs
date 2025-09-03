@@ -55,9 +55,27 @@ fn bench_simple_hash_reuse_reset_poseidon2(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_simple_hash_minimal_poseidon2(c: &mut Criterion) {
+    // Measures a single digest after absorbing exactly 3 elements (t=4 → rate=3)
+    let mut group = c.benchmark_group("simple_hash_minimal_poseidon2");
+    group.bench_function("pallas2_absorb3_digest", |b| {
+        b.iter_batched(
+            || PallasPoseidon2Hasher::new_with_domain("MIN2"),
+            |mut hasher| {
+                hasher.update(ark_pallas::Fq::from(1u64));
+                hasher.update(ark_pallas::Fq::from(2u64));
+                hasher.update(ark_pallas::Fq::from(3u64));
+                let _ = hasher.digest();
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    group.finish();
+}
 criterion_group!(
     benches,
     bench_simple_hash_stream_poseidon2,
-    bench_simple_hash_reuse_reset_poseidon2
+    bench_simple_hash_reuse_reset_poseidon2,
+    bench_simple_hash_minimal_poseidon2
 );
 criterion_main!(benches);
