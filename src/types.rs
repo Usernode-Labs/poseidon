@@ -356,6 +356,12 @@ pub mod poseidon2 {
         sponge: ArkPoseidon2Sponge<ark_pallas::Fq>,
     }
 
+    impl Default for PallasPoseidon2Compress {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl PallasPoseidon2Compress {
         /// Create a new compressor using t=4 Poseidon2 params for Pallas.
         pub fn new() -> Self {
