@@ -6,9 +6,9 @@ Type‑safe, multi‑curve Poseidon hash with domain/type separation and an arkw
 
 - Poseidon sponge (arkworks): t=3, rate=2, capacity=1
 - Domain separation: per-hasher domain strings to namespace outputs
-- Type tags: disambiguate BaseField, ScalarField, CurvePoint (finite/infinity), and primitives
+- Per-class lane tweaks: Disambiguate BaseField, ScalarField, CurvePoint (finite/infinity), and primitives via Domain‑in‑Rate tweaks (no field‑level tags)
 - Primitive packing: byte‑efficient (default) or circuit‑friendly
-- Multi-curve: Pallas, Vesta, BN254, BLS12-381, BLS12-377 (embedded parameters)
+- Multi-curve: Pallas, Vesta, BN254, BLS12-381, BLS12-377 (dynamic parameters via arkworks)
 - Memory hygiene: primitive packing buffers zeroized on drop/reset
 
 ## Installation
@@ -28,7 +28,7 @@ use poseidon_hash::PoseidonHasher; // brings update/digest/reset/finalize into s
 use ark_ec::AffineRepr;
 
 // Create a namespaced hasher (recommended)
-let mut hasher = PallasHasher::new_with_domain("VRF_DOMAIN");
+let mut hasher = PallasHasher::new_with_domain("VRF_DOMAIN"); // Domain-in-Rate is the default
 
 // Update with different types (tags added automatically)
 hasher.update(ark_pallas::Fr::from(42u64));              // scalar field
@@ -40,6 +40,35 @@ hasher.update("hello");                                  // string
 let hash = hasher.digest(); // non-consuming; finalize() consumes
 println!("Hash: {}", hash);
 ```
+
+## Poseidon2 (Pallas)
+
+This crate also exposes a Poseidon2 variant for the Pallas base field (Fq). It
+has the same ergonomic API as the Poseidon v1 hashers and uses the same
+absorb/squeeze sponge construction under the hood.
+
+```rust
+use poseidon_hash::PallasPoseidon2Hasher; // Poseidon2 permutation on Pallas Fq
+use poseidon_hash::PoseidonHasher;        // brings update()/digest() into scope
+
+let mut h = PallasPoseidon2Hasher::new();            // default params (t=3, d=5)
+h.update(ark_pallas::Fq::from(42u64));               // base field
+h.update(ark_pallas::Fr::from(123u64));              // scalar field (converted)
+let out = h.digest();
+
+// Optional domain separation (Domain-in-Rate)
+let mut h2 = PallasPoseidon2Hasher::new_with_domain("MY_DOMAIN");
+h2.update(ark_pallas::Fq::from(1u64));
+let out2 = h2.digest();
+```
+
+Notes
+- The Poseidon2 Pallas hasher mirrors the v1 API (update over base/scalar/points
+  and primitives; digest/reset/finalize; optional domain).
+- Default parameters are derived deterministically (Grain LFSR). A test vector
+  (“KAT”) validates the permutation against the HorizenLabs Poseidon2 Pallas
+  constants when those parameters are supplied.
+- Benchmarks for Poseidon2 are available: `cargo bench --bench simple_hash_poseidon2`.
 
 ## Multi-Curve
 
@@ -165,6 +194,79 @@ cargo test -- --nocapture
 cargo test security_tests
 ```
 
+## Benchmarks
+
+This repo includes Criterion benches for Poseidon v1 and Poseidon2 (Pallas and BN254), plus external comparisons against O(1) Labs (kimchi) and Aztec (barretenberg FFI).
+
+- Our benches:
+  - Poseidon v1 (Pallas): `cargo bench --bench simple_hash`
+  - Poseidon2 (Pallas): `cargo bench --bench simple_hash_poseidon2`
+  - Poseidon2 (BN254): `cargo bench --bench simple_hash_poseidon2_bn254`
+
+### Aztec Poseidon2 (BN254) benches
+
+The Aztec benches call into barretenberg’s C++ FFI to exercise their Poseidon2 (BN254) permutation.
+
+Prerequisites:
+- CMake (>= 3.24) and Ninja
+- Clang (Apple Clang on macOS is fine)
+
+Steps:
+1) Clone aztec-packages into the repo root (expected path is `./aztec-packages`):
+
+```
+git clone --depth 1 --branch next https://github.com/Usernode-Labs/aztec-packages aztec-packages
+```
+
+2) Build the required barretenberg static libraries:
+
+```
+cd aztec-packages/barretenberg/cpp
+cmake --fresh --preset default
+
+# Option A: build everything (slower)
+cmake --build --preset default
+
+# Option B: build only the needed static libs (faster)
+cd build
+ninja \
+  lib/libcrypto_poseidon2.a \
+  lib/libcrypto_schnorr.a \
+  lib/libecc.a \
+  lib/libenv.a \
+  lib/libcrypto_pedersen_hash.a \
+  lib/libcrypto_pedersen_commitment.a \
+  lib/libnumeric.a \
+  lib/libcommon.a -j $(sysctl -n hw.ncpu)
+```
+
+3) Run the Aztec benches:
+
+```
+cd benches/aztec
+cargo bench
+```
+
+Troubleshooting:
+- If you see `Expected prebuilt barretenberg at .../barretenberg/cpp/build/lib`, complete step (2) to build the static libraries.
+- On macOS, install tools via Homebrew: `brew install cmake ninja`.
+
+### Comparison report
+
+Run the Python script to produce a consolidated Markdown report with separate Poseidon2‑only and Poseidon v1‑only tables (and a combined view at the end):
+
+```
+python3 scripts/compare_benches.py
+```
+
+This executes:
+- Our v1 and v2 benches (Pallas + BN254)
+- O(1) Labs kimchi benches (`benches/o1labs`)
+- Aztec Poseidon2 benches (`benches/aztec`)
+
+Output:
+- `bench-comparison.md` at the repo root. If Aztec or O(1) benches are unavailable, the script skips them with a warning.
+
 ## Security
 
 - 128-bit security level (parameterized Poseidon, t=3)
@@ -210,4 +312,4 @@ Please ensure:
 ## Acknowledgments
 
 Based on *"Poseidon: A New Hash Function for Zero-Knowledge Proof Systems"*.
-Parameters generated using the official reference implementation with 128-bit security level.
+Parameters derived deterministically via arkworks (Grain LFSR) with a 128-bit security target.

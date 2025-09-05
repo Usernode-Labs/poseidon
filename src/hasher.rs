@@ -2,7 +2,7 @@
 //!
 //! This module provides the core [`MultiFieldHasher`] that can work with any elliptic curve
 //! and automatically handles field conversions between different field types (Fr, Fq, curve points).
-//! 
+//!
 //! ## Features
 //!
 //! - **Safe numeric conversions** - Uses `try_from()` instead of unsafe casts
@@ -19,11 +19,11 @@
 //! - Understanding the underlying implementation
 //!
 //! ```rust
-//! use poseidon_hash::hasher::{MultiFieldHasher, FieldInput, HasherResult};
+//! use poseidon_hash::hasher::{MultiFieldHasherV1 as MultiFieldHasher, FieldInput, HasherResult};
 //! use poseidon_hash::parameters::pallas::PALLAS_PARAMS;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> = 
+//! let mut hasher: MultiFieldHasher<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine> =
 //!     MultiFieldHasher::new_from_ref(&*PALLAS_PARAMS);
 //!     
 //! hasher.update(FieldInput::ScalarField(ark_pallas::Fr::from(42u64)));
@@ -32,15 +32,14 @@
 //! # }
 //! ```
 
-use ark_ff::{PrimeField, BigInteger, Zero};
+use crate::ark_poseidon::{ArkPoseidon2Sponge, ArkPoseidonSponge};
+use crate::primitive::{PackingBuffer, PackingConfig, PrimitiveInput};
 use ark_crypto_primitives::sponge::{CryptographicSponge, FieldBasedCryptographicSponge};
 use ark_ec::AffineRepr;
+use ark_ff::{BigInteger, PrimeField, Zero};
 use std::marker::PhantomData;
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
-use crate::primitive::{RustInput, PackingBuffer, PackingConfig, serialize_rust_input};
-use crate::tags::*;
-use crate::ark_poseidon::ArkPoseidonSponge;
 
 /// Errors that can occur during hashing operations.
 #[derive(Error, Debug)]
@@ -50,9 +49,9 @@ pub enum HasherError {
     PointConversionFailed,
     /// Numeric conversion failed (overflow or underflow)
     #[error("Numeric conversion failed: {reason}")]
-    NumericConversionFailed { 
+    NumericConversionFailed {
         /// Description of the specific conversion failure
-        reason: String 
+        reason: String,
     },
 }
 
@@ -60,7 +59,7 @@ pub enum HasherError {
 pub type HasherResult<T> = Result<T, HasherError>;
 
 /// Multi-field input types for the generic Poseidon hasher.
-/// 
+///
 /// This enum provides type-safe input handling for different field element types
 /// within the same elliptic curve ecosystem.
 #[derive(Debug, Clone)]
@@ -68,22 +67,23 @@ pub enum FieldInput<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> 
     /// Base field element (Fq) - added directly without conversion
     BaseField(F),
     /// Scalar field element (Fr) - converted to base field representation
-    ScalarField(S), 
+    ScalarField(S),
     /// Curve point in affine representation - coordinates extracted as base field elements
     CurvePoint(G),
     /// Primitive Rust type that needs packing
-    Primitive(RustInput),
+    Primitive(PrimitiveInput),
 }
 
 // Single blanket implementation for all primitive types!
-impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<RustInput>> From<T> for FieldInput<F, S, G> {
+impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<PrimitiveInput>> From<T>
+    for FieldInput<F, S, G>
+{
     fn from(value: T) -> Self {
         Self::Primitive(value.into())
     }
 }
 
-
-/// Advanced multi-field Poseidon hasher with sophisticated field conversion capabilities.
+/// Advanced multi-field Poseidon hasher
 ///
 /// This generic hasher can work with any elliptic curve and automatically handles
 /// conversion between different field types within the same curve's ecosystem.
@@ -100,18 +100,21 @@ impl<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, T: Into<RustInp
 /// * `S: PrimeField` - Scalar field (Fr) used for private keys and discrete logarithms  
 /// * `G: AffineRepr<BaseField = F>` - Curve points in affine representation
 #[derive(ZeroizeOnDrop)]
-pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>> {
+pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseField = F>, SP>
+where
+    SP: CryptographicSponge + FieldBasedCryptographicSponge<F> + Clone,
+{
     /// Poseidon hasher instance parameterized over the base field F
-    /// 
+    ///
     /// Note: This contains cryptographic parameters that are public and don't need zeroization.
     /// The internal state of the Poseidon hasher may contain sensitive data, but we can't
     /// control its zeroization directly as it's from an external crate.
     #[zeroize(skip)]
-    sponge: ArkPoseidonSponge<F>,
+    sponge: SP,
     #[zeroize(skip)]
-    base_sponge: ArkPoseidonSponge<F>,
+    base_sponge: SP,
     /// Buffer for accumulating primitive types before packing into field elements
-    /// 
+    ///
     /// This may contain sensitive input data and will be zeroized on drop.
     primitive_buffer: PackingBuffer,
     #[zeroize(skip)]
@@ -122,40 +125,180 @@ pub struct MultiFieldHasher<F: PrimeField, S: PrimeField, G: AffineRepr<BaseFiel
     /// Phantom data to track curve point type G without storing instances  
     #[zeroize(skip)]
     _phantom_g: PhantomData<G>,
+    // Poseidon rate (from params)
+    #[zeroize(skip)]
+    rate: usize,
+    // Current lane cursor within the rate
+    #[zeroize(skip)]
+    lane_cursor: usize,
+    // Domain-in-Rate constants per class
+    #[zeroize(skip)]
+    dir_consts: DirConstants<F>,
+    // Pending per-domain tweak to apply at next block boundary (DiR)
+    #[zeroize(skip)]
+    pending_domain: Option<[F; MAX_RATE]>,
+    /// If true, delay applying domain tweak until lane_cursor == 0
+    #[zeroize(skip)]
+    pending_domain_at_block_start: bool,
+    /// Number of lanes left to apply from pending_domain (when active)
+    #[zeroize(skip)]
+    domain_lanes_remaining: usize,
 }
 
-const SAFETY_MARGIN_BITS: usize = 8;
+const MAX_RATE: usize = 12;
 
-impl<F, S, G> MultiFieldHasher<F, S, G>
+#[derive(Debug, Clone)]
+struct DirConstants<F: PrimeField + Zero> {
+    base: [F; MAX_RATE],
+    scalar: [F; MAX_RATE],
+    curve_finite: [F; MAX_RATE],
+    curve_infinity: [F; MAX_RATE],
+    primitive: [F; MAX_RATE],
+}
+
+impl<F: PrimeField + Zero> DirConstants<F> {
+    #[inline]
+    fn for_class(&self, class: DirClass) -> &[F; MAX_RATE] {
+        match class {
+            DirClass::Base => &self.base,
+            DirClass::Scalar => &self.scalar,
+            DirClass::CurveFinite => &self.curve_finite,
+            DirClass::CurveInfinity => &self.curve_infinity,
+            DirClass::Primitive => &self.primitive,
+        }
+    }
+}
+
+// Convenient aliases: v1 uses Ark Poseidon (arkworks), v2 uses our Poseidon2.
+pub type MultiFieldHasherV1<F, S, G> = MultiFieldHasher<F, S, G, ArkPoseidonSponge<F>>;
+pub type MultiFieldHasherV2<F, S, G> = MultiFieldHasher<F, S, G, ArkPoseidon2Sponge<F>>;
+
+fn derive_lane_constants<F: PrimeField + Zero>(label: &str, rate: usize) -> [F; MAX_RATE] {
+    use core::array::from_fn;
+    assert!(
+        rate <= MAX_RATE,
+        "rate {} exceeds MAX_RATE {}",
+        rate,
+        MAX_RATE
+    );
+    from_fn(|i| {
+        if i < rate {
+            let s = format!("{}|{}", label, i);
+            F::from_le_bytes_mod_order(s.as_bytes())
+        } else {
+            F::zero()
+        }
+    })
+}
+
+fn derive_domain_tweak<F: PrimeField + Zero>(domain: &[u8], rate: usize) -> [F; MAX_RATE] {
+    use core::array::from_fn;
+    assert!(
+        rate <= MAX_RATE,
+        "rate {} exceeds MAX_RATE {}",
+        rate,
+        MAX_RATE
+    );
+    from_fn(|i| {
+        if i < rate {
+            let mut buf = Vec::with_capacity(12 + domain.len() + 8);
+            buf.extend_from_slice(b"DIR|DOMAIN|");
+            buf.extend_from_slice(domain);
+            buf.extend_from_slice(b"|");
+            buf.extend_from_slice(&(i as u64).to_le_bytes());
+            F::from_le_bytes_mod_order(&buf)
+        } else {
+            F::zero()
+        }
+    })
+}
+
+fn build_dir_constants<F: PrimeField + Zero>(rate: usize) -> DirConstants<F> {
+    DirConstants {
+        base: derive_lane_constants("DIR|BASE", rate),
+        scalar: derive_lane_constants("DIR|SCALAR", rate),
+        curve_finite: derive_lane_constants("DIR|CURVE_FIN", rate),
+        curve_infinity: derive_lane_constants("DIR|CURVE_INF", rate),
+        primitive: derive_lane_constants("DIR|PRIM", rate),
+    }
+}
+
+impl<F, S, G, SP> MultiFieldHasher<F, S, G, SP>
 where
     F: PrimeField + Zero + ark_crypto_primitives::sponge::Absorb,
     S: PrimeField,
     G: AffineRepr<BaseField = F>,
+    SP: CryptographicSponge + FieldBasedCryptographicSponge<F> + Clone,
 {
+    #[inline]
+    /// Compute Domain-in-Rate adjusted elements without mutating hasher state.
+    ///
+    /// Applies per-class lane tweaks and any pending one-block domain tweak
+    /// relative to the current internal cursor, but does not change internal
+    /// counters or pending flags. Used by `digest()` to absorb remaining
+    /// buffered elements into a cloned sponge while preserving the live state.
+    fn compute_domain_in_rate_adjusted_elements_without_mutating_state(
+        &self,
+        elems: &[F],
+        class: DirClass,
+    ) -> Vec<F> {
+        let class_vec = self.dir_consts.for_class(class);
+
+        let mut adjusted: Vec<F> = Vec::with_capacity(elems.len());
+        let mut lane_cursor = self.lane_cursor;
+        let mut pending_domain_at_block_start = self.pending_domain_at_block_start;
+        let mut domain_lanes_remaining = self.domain_lanes_remaining;
+        let mut dom_active = self.pending_domain.is_some();
+        let dom_ref = self.pending_domain.as_ref();
+        for &e in elems.iter() {
+            let lane = lane_cursor % self.rate;
+            let mut v = e + class_vec[lane];
+            if dom_active && let Some(dom) = dom_ref {
+                let should_apply_now = if pending_domain_at_block_start {
+                    lane == 0
+                } else {
+                    true
+                };
+                if should_apply_now && domain_lanes_remaining > 0 {
+                    v += dom[lane];
+                    domain_lanes_remaining -= 1;
+                    pending_domain_at_block_start = false;
+                    if domain_lanes_remaining == 0 {
+                        dom_active = false;
+                    }
+                }
+            }
+            adjusted.push(v);
+            lane_cursor = (lane_cursor + 1) % self.rate;
+        }
+        adjusted
+    }
     #[inline]
     fn assert_scalar_fits_base_field() {
         // We intentionally keep the API infallible. Enforce at construction time
         // that the scalar field does not exceed the base field by bit size.
         // This avoids ambiguous Fr→Fq mappings for unsupported curves.
         if S::MODULUS_BIT_SIZE > F::MODULUS_BIT_SIZE {
-            panic!("Unsupported curve configuration: Fr bit size ({}) exceeds Fq bit size ({}). This library does not support Fr→Fq limb decomposition.",
-                S::MODULUS_BIT_SIZE, F::MODULUS_BIT_SIZE);
+            panic!(
+                "Unsupported curve configuration: Fr bit size ({}) exceeds Fq bit size ({}). This library does not support Fr→Fq limb decomposition.",
+                S::MODULUS_BIT_SIZE,
+                F::MODULUS_BIT_SIZE
+            );
         }
     }
 
-    fn max_bytes_per_field() -> usize {
-        let field_bits = F::MODULUS_BIT_SIZE as usize;
-        let safe_bits = field_bits.saturating_sub(SAFETY_MARGIN_BITS);
-        std::cmp::max(safe_bits / 8, 1)
-    }
     /// Creates a new multi-field hasher from Poseidon parameters.
     ///
     /// # Arguments
     ///
     /// * `params` - Poseidon parameters for the base field F
-    pub fn new(params: crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self {
+    pub fn new(params: <SP as CryptographicSponge>::Config) -> Self
+    where
+        <SP as CryptographicSponge>::Config: SpongeParams,
+    {
         Self::assert_scalar_fits_base_field();
-        let sponge = ArkPoseidonSponge::new(&params);
+        let sponge = SP::new(&params);
+        let rate = SpongeParams::rate(&params);
         Self {
             base_sponge: sponge.clone(),
             sponge,
@@ -163,9 +306,15 @@ where
             count: 0,
             _phantom_s: PhantomData,
             _phantom_g: PhantomData,
+            rate,
+            lane_cursor: 0,
+            dir_consts: build_dir_constants::<F>(rate),
+            pending_domain: None,
+            pending_domain_at_block_start: false,
+            domain_lanes_remaining: 0,
         }
     }
-    
+
     /// Creates a new multi-field hasher from a reference to Poseidon parameters.
     ///
     /// This method clones the parameters internally.
@@ -173,23 +322,30 @@ where
     /// # Arguments
     ///
     /// * `params` - Reference to Poseidon parameters for the base field F
-    pub fn new_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>) -> Self 
+    pub fn new_from_ref(params: &<SP as CryptographicSponge>::Config) -> Self
     where
-        F: Clone,
+        <SP as CryptographicSponge>::Config: Clone + SpongeParams,
     {
         Self::assert_scalar_fits_base_field();
-        Self::new(crate::parameters::clone_parameters(params))
+        Self::new(params.clone())
     }
-    
+
     /// Creates a new multi-field hasher with custom packing configuration.
     ///
     /// # Arguments
     ///
     /// * `params` - Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
-    pub fn new_with_config(params: crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self {
+    pub fn new_with_config(
+        params: <SP as CryptographicSponge>::Config,
+        packing_config: PackingConfig,
+    ) -> Self
+    where
+        <SP as CryptographicSponge>::Config: SpongeParams,
+    {
         Self::assert_scalar_fits_base_field();
-        let sponge = ArkPoseidonSponge::new(&params);
+        let sponge = SP::new(&params);
+        let rate = SpongeParams::rate(&params);
         Self {
             base_sponge: sponge.clone(),
             sponge,
@@ -197,61 +353,46 @@ where
             count: 0,
             _phantom_s: PhantomData,
             _phantom_g: PhantomData,
+            rate,
+            lane_cursor: 0,
+            dir_consts: build_dir_constants::<F>(rate),
+            pending_domain: None,
+            pending_domain_at_block_start: false,
+            domain_lanes_remaining: 0,
         }
     }
 
-    // No longer used: compression chaining replaced by Poseidon sponge
-    
     /// Creates a new multi-field hasher with custom packing configuration from parameter reference.
     ///
     /// # Arguments
     ///
     /// * `params` - Reference to Poseidon parameters for the base field F
     /// * `packing_config` - Configuration for packing primitive types
-    pub fn new_with_config_from_ref(params: &crate::ark_poseidon::ArkPoseidonConfig<F>, packing_config: PackingConfig) -> Self 
+    pub fn new_with_config_from_ref(
+        params: &<SP as CryptographicSponge>::Config,
+        packing_config: PackingConfig,
+    ) -> Self
     where
-        F: Clone,
+        <SP as CryptographicSponge>::Config: Clone + SpongeParams,
     {
         Self::assert_scalar_fits_base_field();
-        Self::new_with_config(crate::parameters::clone_parameters(params), packing_config)
+        Self::new_with_config(params.clone(), packing_config)
     }
 
-    /// Absorb a domain context as a tagged byte sequence at the start of the state.
+    /// Absorb a domain context using Domain-in-Rate lane tweaks.
     /// This namespaces the hasher so identical inputs produce different hashes across domains.
     pub fn absorb_domain(&mut self, domain: &[u8]) {
-        // Field-level domain tag absorbed into both base and live sponge
-        let tag = F::from(TAG_DOMAIN_CTX as u64);
-        let v = vec![tag];
-        self.sponge.absorb(&v);
-        self.base_sponge.absorb(&v);
-        self.count += 1;
-
-        // Fixed, config-independent domain encoding:
-        // absorb the byte length as a field element, then absorb chunks of bytes
-        let len_f = F::from(domain.len() as u64);
-        let vlen = vec![len_f];
-        self.sponge.absorb(&vlen);
-        self.base_sponge.absorb(&vlen);
-        self.count += 1;
-
-        let chunk = Self::max_bytes_per_field();
-        let mut i = 0;
-        while i < domain.len() {
-            let end = std::cmp::min(i + chunk, domain.len());
-            let fe = F::from_le_bytes_mod_order(&domain[i..end]);
-            let vv = vec![fe];
-            self.sponge.absorb(&vv);
-            self.base_sponge.absorb(&vv);
-            self.count += 1;
-            i = end;
-        }
+        // Derive per-lane tweak from the actual domain bytes.
+        // Apply starting at the next block boundary (lane 0).
+        let tweak = derive_domain_tweak::<F>(domain, self.rate);
+        self.pending_domain = Some(tweak);
+        self.pending_domain_at_block_start = true;
+        self.domain_lanes_remaining = self.rate;
     }
 
     /// Absorbs a base field element (Fq) directly into the hasher state.
     pub fn update_base_field(&mut self, element: F) {
-        let v = vec![F::from(TAG_BASE_FIELD as u64), element];
-        self.sponge.absorb(&v);
-        self.count += 2;
+        self.absorb_dir(&[element], DirClass::Base);
     }
 
     /// Absorbs a scalar field element (Fr) with automatic conversion to base field (Fq).
@@ -261,36 +402,26 @@ where
     /// * Fr < Fq: Direct conversion without data loss
     /// * Fr > Fq: Not supported (guarded at construction time)
     pub fn update_scalar_field(&mut self, element: S) {
-        // Tag scalar field input
-        let v = vec![F::from(TAG_SCALAR_FIELD as u64)];
-        self.sponge.absorb(&v);
-        self.count += 1;
         let fr_bits = S::MODULUS_BIT_SIZE;
         let fq_bits = F::MODULUS_BIT_SIZE;
-        
-        if fr_bits <= fq_bits {
-            // Same bit size or Fr smaller than Fq, lossless conversion
-            let bytes = element.into_bigint().to_bytes_le();
-            let converted = F::from_le_bytes_mod_order(&bytes);
-            let v = vec![converted];
-            self.sponge.absorb(&v);
-            self.count += 1;
-        } else {
-            // Should be unreachable due to constructor guard.
-            panic!("Unsupported curve configuration encountered at runtime: Fr bit size ({}) exceeds Fq bit size ({}).", fr_bits, fq_bits);
+        if fr_bits > fq_bits {
+            panic!(
+                "Unsupported curve configuration encountered at runtime: Fr bit size ({}) exceeds Fq bit size ({}).",
+                fr_bits, fq_bits
+            );
         }
+        let bytes = element.into_bigint().to_bytes_le();
+        let converted = F::from_le_bytes_mod_order(&bytes);
+        self.absorb_dir(&[converted], DirClass::Scalar);
     }
 
     /// Absorbs a curve point by extracting and hashing its affine coordinates.
     pub fn update_curve_point(&mut self, point: G) {
         if let Some((x, y)) = point.xy() {
-            let v = vec![F::from(TAG_CURVE_POINT_FINITE as u64), x, y];
-            self.sponge.absorb(&v);
-            self.count += 3;
+            self.absorb_dir(&[x, y], DirClass::CurveFinite);
         } else {
-            let v = vec![F::from(TAG_CURVE_POINT_INFINITY as u64)];
-            self.sponge.absorb(&v);
-            self.count += 1;
+            // Represent infinity as a single tweaked zero element
+            self.absorb_dir(&[F::zero()], DirClass::CurveInfinity);
         }
     }
 
@@ -314,18 +445,16 @@ where
     /// # Arguments
     ///
     /// * `input` - The primitive value to add
-    fn update_primitive(&mut self, input: RustInput) {
+    fn update_primitive(&mut self, input: PrimitiveInput) {
         // Serialize the input into the primitive buffer
-        serialize_rust_input(&input, &mut self.primitive_buffer);
-        
-        // Extract any complete field elements and absorb them
+        self.primitive_buffer.push_tag(input.tag);
+        self.primitive_buffer.push_bytes(&input.bytes);
+        // Extract any complete field elements
         let field_elements = self.primitive_buffer.extract_field_elements::<F>();
         if !field_elements.is_empty() {
-            self.sponge.absorb(&field_elements);
-            self.count += field_elements.len();
+            self.absorb_dir(&field_elements, DirClass::Primitive);
         }
     }
-    
 
     /// Finalizes via sponge: clones internal sponge, absorbs remaining primitives, squeezes one element.
     pub fn digest(&mut self) -> F {
@@ -333,33 +462,37 @@ where
         let mut buf = self.primitive_buffer.clone();
         let remaining = buf.flush_remaining::<F>();
         if !remaining.is_empty() {
-            sponge.absorb(&remaining);
+            // Apply DiR tweaks relative to current state without mutating it
+            let adjusted = self.compute_domain_in_rate_adjusted_elements_without_mutating_state(
+                &remaining,
+                DirClass::Primitive,
+            );
+            sponge.absorb(&adjusted);
         }
         sponge.squeeze_native_field_elements(1)[0]
     }
 
-
     /// Consume the hasher and return the final hash result.
-    /// 
+    ///
     /// This is equivalent to `digest()` but takes ownership of the hasher,
     /// ensuring it cannot be used again and triggering automatic cleanup via `ZeroizeOnDrop`.
     /// Useful when you want to guarantee the hasher is consumed after getting the final result.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The final hash of all added elements.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```rust
     /// # use poseidon_hash::PallasHasher;
     /// # use poseidon_hash::PoseidonHasher;
     /// # fn main() {
     /// let mut hasher = PallasHasher::new();
-    /// 
+    ///
     /// hasher.update(42u64);
     /// hasher.update(100u64);
-    /// 
+    ///
     /// let final_hash = hasher.finalize();  // hasher is consumed here
     /// // hasher can no longer be used
     /// # }
@@ -367,18 +500,22 @@ where
     pub fn finalize(mut self) -> F {
         let remaining = self.primitive_buffer.flush_remaining::<F>();
         if !remaining.is_empty() {
-            self.sponge.absorb(&remaining);
+            self.absorb_dir(&remaining, DirClass::Primitive);
         }
         self.sponge.squeeze_native_field_elements(1)[0]
     }
 
-    /// Resets the hasher state without changing parameters.
-    /// 
+    /// Resets the hasher state without changing parameters (DiR baseline).
+    ///
     /// This method securely clears all sensitive data from memory using zeroization.
     pub fn reset(&mut self) {
         self.sponge = self.base_sponge.clone();
         self.primitive_buffer.clear();
         self.count = 0;
+        self.lane_cursor = 0;
+        self.pending_domain = None;
+        self.pending_domain_at_block_start = false;
+        self.domain_lanes_remaining = 0;
     }
 
     /// Returns the current number of elements added.
@@ -387,44 +524,119 @@ where
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum DirClass {
+    Base,
+    Scalar,
+    CurveFinite,
+    CurveInfinity,
+    Primitive,
+}
+
+impl<F, S, G, SP> MultiFieldHasher<F, S, G, SP>
+where
+    F: PrimeField + Zero + ark_crypto_primitives::sponge::Absorb,
+    S: PrimeField,
+    G: AffineRepr<BaseField = F>,
+    SP: CryptographicSponge + FieldBasedCryptographicSponge<F> + Clone,
+{
+    fn absorb_dir(&mut self, elems: &[F], class: DirClass) {
+        // Per-class lane constants
+        let class_vec = self.dir_consts.for_class(class);
+
+        let mut adjusted: Vec<F> = Vec::with_capacity(elems.len());
+        for &e in elems.iter() {
+            let lane = self.lane_cursor % self.rate;
+
+            // Start with per-class tweak for this lane
+            let mut v = e + class_vec[lane];
+
+            // Apply a one-shot domain tweak to the next full block, aligned to lane 0
+            if let Some(dom) = self.pending_domain.as_ref() {
+                let should_apply_now = if self.pending_domain_at_block_start {
+                    lane == 0
+                } else {
+                    true
+                };
+
+                if should_apply_now && self.domain_lanes_remaining > 0 {
+                    v += dom[lane];
+                    self.domain_lanes_remaining -= 1;
+                    self.pending_domain_at_block_start = false; // we've started applying this block
+                    if self.domain_lanes_remaining == 0 {
+                        self.pending_domain = None;
+                        self.pending_domain_at_block_start = false;
+                    }
+                }
+            }
+
+            adjusted.push(v);
+            self.lane_cursor = (self.lane_cursor + 1) % self.rate;
+        }
+        self.sponge.absorb(&adjusted);
+        self.count += adjusted.len();
+    }
+}
+
+// Small helper trait to get sponge rate from config generically.
+pub trait SpongeParams {
+    fn rate(&self) -> usize;
+}
+
+impl<F: PrimeField> SpongeParams for ark_crypto_primitives::sponge::poseidon::PoseidonConfig<F> {
+    #[inline]
+    fn rate(&self) -> usize {
+        self.rate
+    }
+}
+
+impl<F: PrimeField> SpongeParams for crate::poseidon2::PoseidonConfig<F> {
+    #[inline]
+    fn rate(&self) -> usize {
+        self.rate
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{PallasHasher, PallasInput, BN254Hasher, BN254Input, PoseidonHasher};
+    use crate::parameters::pallas::PALLAS_PARAMS;
+    use crate::types::{BN254Hasher, PallasHasher, PoseidonHasher};
+    use ark_crypto_primitives::sponge::CryptographicSponge;
     use ark_ec::AffineRepr;
 
     #[test]
     fn test_embedded_parameters_basic() {
         let mut hasher = PallasHasher::new();
-        
+
         let a = ark_pallas::Fq::from(1u64);
         let b = ark_pallas::Fq::from(2u64);
-        
+
         // Old way still works
-        hasher.update(PallasInput::BaseField(a));
-        hasher.update(PallasInput::BaseField(b));
-        
+        hasher.update(a);
+        hasher.update(b);
+
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
-    
+
     #[test]
     fn test_from_implementations() {
         let mut hasher = PallasHasher::new();
-        
+
         // New way - much cleaner!
         hasher.update(ark_pallas::Fq::from(1u64));
         hasher.update(ark_pallas::Fr::from(2u64));
         hasher.update(ark_pallas::Affine::generator());
-        
+
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
-    
+
     #[test]
     fn test_unified_update_api() {
         let mut hasher = PallasHasher::new();
-        
+
         // Everything through a single update method - this is the dream API!
         hasher.update(ark_pallas::Fq::from(1u64));
         hasher.update(ark_pallas::Fr::from(2u64));
@@ -433,44 +645,44 @@ mod tests {
         hasher.update(42u64);
         hasher.update("hello");
         hasher.update(vec![1u8, 2, 3]);
-        
+
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
-    
+
     #[test]
     fn test_api_comparison() {
         // Manual enum construction (still works)
         let mut explicit_style = PallasHasher::new();
-        explicit_style.update(PallasInput::ScalarField(ark_pallas::Fr::from(42u64)));
-        explicit_style.update(PallasInput::Primitive(RustInput::Bool(true)));
-        explicit_style.update(PallasInput::Primitive(RustInput::from_string_slice("test")));
-        
+        explicit_style.update(ark_pallas::Fr::from(42u64));
+        explicit_style.update(true);
+        explicit_style.update("test");
+
         // Clean unified API (recommended)
         let mut unified_style = PallasHasher::new();
-        unified_style.update(ark_pallas::Fr::from(42u64));  // Direct!
-        unified_style.update(true);                         // Natural!  
-        unified_style.update("test");                       // Intuitive!
-        
+        unified_style.update(ark_pallas::Fr::from(42u64)); // Direct!
+        unified_style.update(true); // Natural!  
+        unified_style.update("test"); // Intuitive!
+
         // Both produce the same result
         assert_eq!(explicit_style.digest(), unified_style.digest());
     }
-    
+
     #[test]
     fn test_generic_from_implementations() {
         // Test that generic From implementations work for all curves!
         let mut pallas = crate::types::PallasHasher::new();
         let mut bn254 = crate::types::BN254Hasher::new();
-        
+
         // Same API works for all curves thanks to generic implementations
         pallas.update(42u64);
         pallas.update(true);
         pallas.update("hello");
-        
+
         bn254.update(42u64);
         bn254.update(true);
         bn254.update("hello");
-        
+
         // Different curves produce different hashes for same input
         let pallas_hash = pallas.digest();
         let bn254_hash = bn254.digest();
@@ -481,26 +693,26 @@ mod tests {
     fn test_proper_chaining_with_embedded_params() {
         // Test that chaining works correctly with embedded parameters
         let mut hasher = PallasHasher::new();
-        
+
         let a = ark_pallas::Fr::from(1u64);
         let b = ark_pallas::Fr::from(2u64);
         let c = ark_pallas::Fr::from(3u64);
         let d = ark_pallas::Fr::from(4u64);
-        
-        hasher.update(PallasInput::ScalarField(a));
-        hasher.update(PallasInput::ScalarField(b));
-        hasher.update(PallasInput::ScalarField(c));
-        hasher.update(PallasInput::ScalarField(d));
-        
+
+        hasher.update(a);
+        hasher.update(b);
+        hasher.update(c);
+        hasher.update(d);
+
         let hash_abcd = hasher.digest();
-        
+
         // Hash just the last two elements
         let mut hasher2 = PallasHasher::new();
-        hasher2.update(PallasInput::ScalarField(c));
-        hasher2.update(PallasInput::ScalarField(d));
-        
+        hasher2.update(c);
+        hasher2.update(d);
+
         let hash_cd = hasher2.digest();
-        
+
         // These should be different due to proper chaining
         assert_ne!(hash_abcd, hash_cd);
     }
@@ -508,15 +720,15 @@ mod tests {
     #[test]
     fn test_multi_field_types() {
         let mut hasher = PallasHasher::new();
-        
+
         let scalar = ark_pallas::Fr::from(42u64);
         let base = ark_pallas::Fq::from(100u64);
         let generator = ark_pallas::Affine::generator();
-        
-        hasher.update(PallasInput::ScalarField(scalar));
-        hasher.update(PallasInput::BaseField(base));
-        hasher.update(PallasInput::CurvePoint(generator));
-        
+
+        hasher.update(scalar);
+        hasher.update(base);
+        hasher.update(generator);
+
         let hash = hasher.digest();
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
@@ -526,16 +738,16 @@ mod tests {
         // Each curve hasher has its own embedded parameters
         let mut pallas_hasher = PallasHasher::new();
         let mut bn254_hasher = BN254Hasher::new();
-        
+
         let pallas_scalar = ark_pallas::Fr::from(123u64);
         let bn254_scalar = ark_bn254::Fr::from(123u64);
-        
-        pallas_hasher.update(PallasInput::ScalarField(pallas_scalar));
-        bn254_hasher.update(BN254Input::ScalarField(bn254_scalar));
-        
+
+        pallas_hasher.update(pallas_scalar);
+        bn254_hasher.update(bn254_scalar);
+
         let pallas_hash = pallas_hasher.digest();
         let bn254_hash = bn254_hasher.digest();
-        
+
         // These should be different because they use different parameters
         assert_ne!(pallas_hash.to_string(), bn254_hash.to_string());
     }
@@ -544,60 +756,126 @@ mod tests {
     fn test_default_constructor() {
         // Test that Default trait works for convenient initialization
         let mut hasher: PallasHasher = Default::default();
-        
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
+
+        hasher.update(ark_pallas::Fq::from(42u64));
         let hash = hasher.digest();
-        
+
         assert_ne!(hash, ark_pallas::Fq::zero());
     }
 
     #[test]
     fn test_hasher_reuse() {
         let mut hasher = PallasHasher::new();
-        
+
         // First hash
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(1u64)));
+        hasher.update(ark_pallas::Fq::from(1u64));
         let hash1 = hasher.digest();
-        
+
         // Second hash (now includes both elements since digest preserves state)
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(2u64)));
+        hasher.update(ark_pallas::Fq::from(2u64));
         let hash2 = hasher.digest();
-        
+
         // Should be different because hash2 contains both elements
         assert_ne!(hash1, hash2);
     }
 
-
     #[test]
     fn test_digest_preserves_state_and_finalize() {
         let mut hasher = PallasHasher::new();
-        
+
         // Add some data
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
-        
+        hasher.update(ark_pallas::Fq::from(42u64));
+
         // Get hash - state should be preserved
         let first_hash = hasher.digest();
         assert_ne!(first_hash, ark_pallas::Fq::zero());
-        
+
         // State should be preserved - element count should be > 0
-        assert!(hasher.element_count() > 0, "State was not preserved after digest");
-        
+        assert!(
+            hasher.element_count() > 0,
+            "State was not preserved after digest"
+        );
+
         // Add more data
-        hasher.update(PallasInput::BaseField(ark_pallas::Fq::from(100u64)));
-        
+        hasher.update(ark_pallas::Fq::from(100u64));
+
         // Second digest should be different (contains both elements)
         let second_hash = hasher.digest();
         assert_ne!(first_hash, second_hash);
-        
+
         // State should still be preserved
         assert!(hasher.element_count() > 0, "State was cleared after digest");
-        
+
         // Test finalize (consumes hasher)
         let mut hasher2 = PallasHasher::new();
-        hasher2.update(PallasInput::BaseField(ark_pallas::Fq::from(42u64)));
+        hasher2.update(ark_pallas::Fq::from(42u64));
         let finalized = hasher2.finalize();
-        
+
         // Should match the first hash (same single input)
         assert_eq!(first_hash, finalized);
+    }
+
+    #[test]
+    fn test_dir_domain_tweak_applies_one_block_at_start() {
+        let params = &*PALLAS_PARAMS;
+        let mut hasher: super::MultiFieldHasherV1<
+            ark_pallas::Fq,
+            ark_pallas::Fr,
+            ark_pallas::Affine,
+        > = super::MultiFieldHasherV1::new_from_ref(params);
+
+        hasher.absorb_domain(b"D1");
+        let r = params.rate;
+        let elems: Vec<ark_pallas::Fq> = (0..r as u64).map(ark_pallas::Fq::from).collect();
+
+        // Expected: use the hasher's own adjustment logic without mutating state
+        let adjusted = hasher.compute_domain_in_rate_adjusted_elements_without_mutating_state(
+            &elems,
+            DirClass::Base,
+        );
+
+        // Clone current sponge state and absorb adjusted sequence
+        let mut expected = hasher.sponge.clone();
+        expected.absorb(&adjusted);
+        let expected_hash = expected.squeeze_native_field_elements(1)[0];
+
+        let mut h2 = hasher;
+        for &e in &elems {
+            h2.update(FieldInput::BaseField(e));
+        }
+        assert_eq!(expected_hash, h2.finalize());
+    }
+
+    #[test]
+    fn test_dir_domain_tweak_after_partial_block_alignment() {
+        let params = &*PALLAS_PARAMS;
+        let mut hasher: super::MultiFieldHasherV1<
+            ark_pallas::Fq,
+            ark_pallas::Fr,
+            ark_pallas::Affine,
+        > = super::MultiFieldHasherV1::new_from_ref(params);
+        let r = params.rate;
+
+        // Advance mid-block by 1
+        hasher.update(FieldInput::BaseField(ark_pallas::Fq::from(99u64)));
+        hasher.absorb_domain(b"D2");
+
+        let elems: Vec<ark_pallas::Fq> = (0..r as u64).map(ark_pallas::Fq::from).collect();
+
+        let adjusted = hasher.compute_domain_in_rate_adjusted_elements_without_mutating_state(
+            &elems,
+            DirClass::Base,
+        );
+
+        // Clone current sponge state (already contains the pre element)
+        let mut expected = hasher.sponge.clone();
+        expected.absorb(&adjusted);
+        let expected_hash = expected.squeeze_native_field_elements(1)[0];
+
+        let mut h2 = hasher;
+        for &e in &elems {
+            h2.update(FieldInput::BaseField(e));
+        }
+        assert_eq!(expected_hash, h2.finalize());
     }
 }

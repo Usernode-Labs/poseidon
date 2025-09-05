@@ -1,5 +1,5 @@
-use poseidon_hash::*;
 use poseidon_hash::PoseidonHasher;
+use poseidon_hash::*;
 
 #[test]
 fn test_determinism_across_types() {
@@ -44,15 +44,19 @@ fn test_determinism_mixed_sequence() {
     let mut h1 = PallasHasher::new();
     let mut h2 = PallasHasher::new();
 
-    let seq: Vec<PallasInput> = vec![
+    let seq: Vec<poseidon_hash::FieldInput<ark_pallas::Fq, ark_pallas::Fr, ark_pallas::Affine>> = vec![
         42u64.into(),
         true.into(),
         "abc".to_string().into(),
         vec![9u8, 8, 7].into(),
     ];
 
-    for item in &seq { h1.update(item.clone()); }
-    for item in &seq { h2.update(item.clone()); }
+    for item in &seq {
+        h1.update(item.clone());
+    }
+    for item in &seq {
+        h2.update(item.clone());
+    }
 
     assert_eq!(h1.digest(), h2.digest());
 }

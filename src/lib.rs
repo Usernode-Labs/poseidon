@@ -1,7 +1,7 @@
 /*!
 # Poseidon Hash Library
 
-A production-ready, type-safe Rust implementation of the Poseidon hash function with 
+A production-ready, type-safe Rust implementation of the Poseidon hash function with
 comprehensive error handling and support for multiple elliptic curves.
 
 ## Features
@@ -27,7 +27,7 @@ let mut hasher = PallasHasher::new();
 
 // Direct ergonomic API - no enum wrapping needed
 hasher.update(ark_pallas::Fr::from(42u64));        // scalar field
-hasher.update(ark_pallas::Fq::from(100u64));       // base field  
+hasher.update(ark_pallas::Fq::from(100u64));       // base field
 hasher.update(ark_pallas::Affine::generator());     // curve point
 hasher.update(42u64);                               // primitive
 hasher.update("hello");                            // string
@@ -70,28 +70,26 @@ bn254_hasher.update(ark_bn254::Fr::from(123u64));    // ✓ BN254 scalar
 */
 
 // Re-export main types at crate root for convenience
-pub use hasher::{MultiFieldHasher, FieldInput, HasherError, HasherResult};
+pub use hasher::{FieldInput, HasherError, HasherResult, MultiFieldHasher};
 pub use parameters::SECURITY_LEVEL;
-pub use primitive::{RustInput, PackingConfig, PackingMode, PaddingMode};
+pub use primitive::{PackingConfig, PackingMode, PaddingMode};
 pub use types::PoseidonHasher;
 
 // Re-export curve-specific hashers and input types
-pub use types::{
-    PallasHasher, PallasInput,
-    BN254Hasher, BN254Input,
-    BLS12_381Hasher, BLS12_381Input,
-    BLS12_377Hasher, BLS12_377Input,
-    VestaHasher, VestaInput,
-};
+pub use types::poseidon2::{PallasPoseidon2Compress, PallasPoseidon2Hasher};
+pub use types::poseidon2_bn254::BN254Poseidon2Hasher;
+pub use types::{BLS12_377Hasher, BLS12_381Hasher, BN254Hasher, PallasHasher, VestaHasher};
 
+// TODO: copied from arkworks, remove once arkworks supports Poseidon2
+mod grain_lfsr;
 // Public modules
+mod ark_poseidon;
 pub mod hasher;
 pub mod parameters;
+mod poseidon2;
 pub mod primitive;
-pub mod types;
 mod tags;
-mod ark_poseidon;
-
+pub mod types;
 
 #[cfg(test)]
 mod tests {
@@ -99,7 +97,7 @@ mod tests {
     fn test_library_exports() {
         // Ensure main types are accessible
         use crate::parameters::SECURITY_LEVEL;
-        
+
         // This test just ensures the library structure compiles correctly
         assert_eq!(SECURITY_LEVEL, 128);
     }

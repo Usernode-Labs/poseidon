@@ -1,1 +1,93 @@
-/target
+############################
+# Build artifacts (Rust)
+############################
+target/
+/debug/
+/release/
+
+# rustfmt / backup files
+**/*.rs.bk
+
+# Compiled artifacts (usually inside target, but ignore just in case)
+*.rmeta
+*.d
+*.o
+*.a
+*.rlib
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+*.pdb
+
+############################
+# Tests, benches, coverage
+############################
+# Criterion benchmark output (often under target, but some setups write here)
+criterion/
+
+# Code coverage / profiling
+coverage/
+*.lcov
+*.gcov
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+############################
+# Logs and temporary files
+############################
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+############################
+# OS-generated files
+############################
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+Icon?
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+############################
+# Editor & IDE settings
+############################
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+*.sublime-project
+*.sublime-workspace
+
+############################
+# Environment / secrets
+############################
+.env
+.env.*
+!.env.example
+
+############################
+# Tooling (optional/common)
+############################
+# wasm-pack / npm
+pkg/
+node_modules/
+
+# Nix / direnv
+result
+.direnv/
+.nix-*
+
+/aztec-packages

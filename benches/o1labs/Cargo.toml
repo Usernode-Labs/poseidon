@@ -1,0 +1,17 @@
+[package]
+name = "o1labs-poseidon-benches"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rayon = "=1.10.0"
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false }
+mina-curves = { git = "https://github.com/o1-labs/proof-systems", branch = "master" }
+mina-poseidon = { git = "https://github.com/o1-labs/proof-systems", branch = "master" }
+rand = "0.8"
+
+[[bench]]
+name = "poseidon_kimchi"
+harness = false

@@ -3,25 +3,30 @@
 //! This module contains cryptographically secure parameters generated using
 //! the official Poseidon reference implementation with 128-bit security level.
 
-use ark_ff::PrimeField;
 use crate::ark_poseidon::ArkPoseidonConfig;
 use ark_crypto_primitives::sponge::poseidon::traits::find_poseidon_ark_and_mds;
+use ark_ff::PrimeField;
 
 /// Security level in bits for all parameter sets
 pub const SECURITY_LEVEL: u32 = 128;
 
-/// State size (t) for all parameter sets
+/// Default state size (t) for embedded static sets (t=3)
+/// Dynamic variants can use other t via helper constructors.
 pub const STATE_SIZE: usize = 3;
 
 /// Alpha value for S-box x^α
 pub const ALPHA: u64 = 5;
 
 // Submodules for each curve's parameters
-pub mod pallas;
-pub mod vesta;
-pub mod bn254;
-pub mod bls12_381;
 pub mod bls12_377;
+pub mod bls12_381;
+pub mod bn254;
+pub mod pallas;
+pub mod poseidon2;
+pub mod poseidon2_bn254;
+pub mod poseidon2_pallas;
+// HL constants are parsed from resource in tests; no need to expose a module.
+pub mod vesta;
 
 /// Helper to create Poseidon sponge config from embedded constants
 pub fn create_parameters<F: PrimeField>(
@@ -39,13 +44,19 @@ pub fn create_parameters<F: PrimeField>(
     for chunk in ark_flat.chunks(t) {
         ark.push(chunk.to_vec());
     }
-    assert_eq!(ark.len(), full_rounds + partial_rounds, "ARK length mismatch");
+    assert_eq!(
+        ark.len(),
+        full_rounds + partial_rounds,
+        "ARK length mismatch"
+    );
 
     ArkPoseidonConfig::new(full_rounds, partial_rounds, ALPHA, mds, ark, r, c)
 }
 
 /// Clone Poseidon sponge config (PoseidonConfig doesn't implement Clone generically)
-pub fn clone_parameters<F: PrimeField + Clone>(params: &ArkPoseidonConfig<F>) -> ArkPoseidonConfig<F> {
+pub fn clone_parameters<F: PrimeField + Clone>(
+    params: &ArkPoseidonConfig<F>,
+) -> ArkPoseidonConfig<F> {
     ArkPoseidonConfig::new(
         params.full_rounds,
         params.partial_rounds,
@@ -83,5 +94,42 @@ where
     let pr = 56u64; // typical for t=3, alpha=5, 128-bit
     let skip = 0u64;
     let (ark, mds) = find_poseidon_ark_and_mds::<F>(prime_bits, rate, fr, pr, skip);
-    ArkPoseidonConfig::new(fr as usize, pr as usize, ALPHA, mds, ark, rate, STATE_SIZE - rate)
+    ArkPoseidonConfig::new(
+        fr as usize,
+        pr as usize,
+        ALPHA,
+        mds,
+        ark,
+        rate,
+        STATE_SIZE - rate,
+    )
+}
+
+/// Create Poseidon parameters dynamically for arbitrary state size t and round counts.
+///
+/// This uses arkworks' deterministic parameter derivation (Grain LFSR) and the
+/// provided round numbers. Choose conservative round numbers for your security level.
+pub fn create_dynamic_parameters<F>(
+    t: usize,
+    full_rounds: usize,
+    partial_rounds: usize,
+    capacity: usize,
+) -> ArkPoseidonConfig<F>
+where
+    F: PrimeField,
+{
+    use ark_crypto_primitives::sponge::poseidon::traits::find_poseidon_ark_and_mds;
+    let prime_bits = F::MODULUS_BIT_SIZE as u64;
+    let rate = t
+        .checked_sub(capacity)
+        .expect("capacity must be <= t when building Poseidon parameters");
+    let skip = 0u64;
+    let (ark, mds) = find_poseidon_ark_and_mds::<F>(
+        prime_bits,
+        rate,
+        full_rounds as u64,
+        partial_rounds as u64,
+        skip,
+    );
+    ArkPoseidonConfig::new(full_rounds, partial_rounds, ALPHA, mds, ark, rate, capacity)
 }
