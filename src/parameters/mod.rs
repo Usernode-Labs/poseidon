@@ -23,8 +23,8 @@ pub mod bls12_381;
 pub mod bn254;
 pub mod pallas;
 pub mod poseidon2;
-pub mod poseidon2_pallas;
 pub mod poseidon2_bn254;
+pub mod poseidon2_pallas;
 // HL constants are parsed from resource in tests; no need to expose a module.
 pub mod vesta;
 

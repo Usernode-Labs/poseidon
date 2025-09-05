@@ -383,20 +383,21 @@ pub mod poseidon2 {
 pub mod poseidon2_bn254 {
     use super::{FieldInput, PoseidonHasher};
     use crate::hasher::MultiFieldHasherV2;
-    use crate::parameters::poseidon2_bn254::{
-        BN254_POSEIDON2_PARAMS, BN254_POSEIDON2_PARAMS_T4,
-    };
+    use crate::parameters::poseidon2_bn254::{BN254_POSEIDON2_PARAMS, BN254_POSEIDON2_PARAMS_T4};
     use crate::primitive::PackingConfig;
 
     pub struct BN254Poseidon2Hasher {
         inner: MultiFieldHasherV2<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>,
     }
 
-    impl PoseidonHasher<ark_bn254::Fq, FieldInput<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>>
+    impl
+        PoseidonHasher<ark_bn254::Fq, FieldInput<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>>
         for BN254Poseidon2Hasher
     {
         fn new() -> Self {
-            Self { inner: MultiFieldHasherV2::new_from_ref(&*BN254_POSEIDON2_PARAMS) }
+            Self {
+                inner: MultiFieldHasherV2::new_from_ref(&*BN254_POSEIDON2_PARAMS),
+            }
         }
 
         fn new_with_config(config: PackingConfig) -> Self {
@@ -414,17 +415,27 @@ pub mod poseidon2_bn254 {
         ) {
             self.inner.update(input)
         }
-        fn digest_result(&mut self) -> ark_bn254::Fq { self.inner.digest() }
-        fn reset_hasher(&mut self) { self.inner.reset() }
-        fn get_element_count(&self) -> usize { self.inner.element_count() }
+        fn digest_result(&mut self) -> ark_bn254::Fq {
+            self.inner.digest()
+        }
+        fn reset_hasher(&mut self) {
+            self.inner.reset()
+        }
+        fn get_element_count(&self) -> usize {
+            self.inner.element_count()
+        }
     }
 
     impl Default for BN254Poseidon2Hasher {
-        fn default() -> Self { <Self as super::PoseidonHasher<_, _>>::new() }
+        fn default() -> Self {
+            <Self as super::PoseidonHasher<_, _>>::new()
+        }
     }
 
     impl BN254Poseidon2Hasher {
-        pub fn new() -> Self { <Self as super::PoseidonHasher<_, _>>::new() }
+        pub fn new() -> Self {
+            <Self as super::PoseidonHasher<_, _>>::new()
+        }
         pub fn new_with_config(config: PackingConfig) -> Self {
             <Self as super::PoseidonHasher<_, _>>::new_with_config(config)
         }
@@ -440,7 +451,9 @@ pub mod poseidon2_bn254 {
         }
 
         pub fn new_variant_t4() -> Self {
-            Self { inner: MultiFieldHasherV2::new_from_ref(&*BN254_POSEIDON2_PARAMS_T4) }
+            Self {
+                inner: MultiFieldHasherV2::new_from_ref(&*BN254_POSEIDON2_PARAMS_T4),
+            }
         }
         pub fn new_with_config_variant_t4(config: PackingConfig) -> Self {
             Self {

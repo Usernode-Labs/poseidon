@@ -21,7 +21,9 @@ fn bench_simple_hash_stream_poseidon2_bn254(c: &mut Criterion) {
                 b.iter_batched(
                     || BN254Poseidon2Hasher::new_with_domain("STREAM2_BN"),
                     |mut hasher| {
-                        for &x in inputs.iter() { hasher.update(x); }
+                        for &x in inputs.iter() {
+                            hasher.update(x);
+                        }
                         let _ = hasher.digest();
                     },
                     BatchSize::SmallInput,
