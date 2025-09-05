@@ -77,6 +77,7 @@ pub use types::PoseidonHasher;
 
 // Re-export curve-specific hashers and input types
 pub use types::poseidon2::{PallasPoseidon2Compress, PallasPoseidon2Hasher};
+pub use types::poseidon2_bn254::BN254Poseidon2Hasher;
 pub use types::{BLS12_377Hasher, BLS12_381Hasher, BN254Hasher, PallasHasher, VestaHasher};
 
 // TODO: copied from arkworks, remove once arkworks supports Poseidon2

@@ -194,6 +194,79 @@ cargo test -- --nocapture
 cargo test security_tests
 ```
 
+## Benchmarks
+
+This repo includes Criterion benches for Poseidon v1 and Poseidon2 (Pallas and BN254), plus external comparisons against O(1) Labs (kimchi) and Aztec (barretenberg FFI).
+
+- Our benches:
+  - Poseidon v1 (Pallas): `cargo bench --bench simple_hash`
+  - Poseidon2 (Pallas): `cargo bench --bench simple_hash_poseidon2`
+  - Poseidon2 (BN254): `cargo bench --bench simple_hash_poseidon2_bn254`
+
+### Aztec Poseidon2 (BN254) benches
+
+The Aztec benches call into barretenberg’s C++ FFI to exercise their Poseidon2 (BN254) permutation.
+
+Prerequisites:
+- CMake (>= 3.24) and Ninja
+- Clang (Apple Clang on macOS is fine)
+
+Steps:
+1) Clone aztec-packages into the repo root (expected path is `./aztec-packages`):
+
+```
+git clone --depth 1 --branch next https://github.com/Usernode-Labs/aztec-packages aztec-packages
+```
+
+2) Build the required barretenberg static libraries:
+
+```
+cd aztec-packages/barretenberg/cpp
+cmake --fresh --preset default
+
+# Option A: build everything (slower)
+cmake --build --preset default
+
+# Option B: build only the needed static libs (faster)
+cd build
+ninja \
+  lib/libcrypto_poseidon2.a \
+  lib/libcrypto_schnorr.a \
+  lib/libecc.a \
+  lib/libenv.a \
+  lib/libcrypto_pedersen_hash.a \
+  lib/libcrypto_pedersen_commitment.a \
+  lib/libnumeric.a \
+  lib/libcommon.a -j $(sysctl -n hw.ncpu)
+```
+
+3) Run the Aztec benches:
+
+```
+cd benches/aztec
+cargo bench
+```
+
+Troubleshooting:
+- If you see `Expected prebuilt barretenberg at .../barretenberg/cpp/build/lib`, complete step (2) to build the static libraries.
+- On macOS, install tools via Homebrew: `brew install cmake ninja`.
+
+### Comparison report
+
+Run the Python script to produce a consolidated Markdown report with separate Poseidon2‑only and Poseidon v1‑only tables (and a combined view at the end):
+
+```
+python3 scripts/compare_benches.py
+```
+
+This executes:
+- Our v1 and v2 benches (Pallas + BN254)
+- O(1) Labs kimchi benches (`benches/o1labs`)
+- Aztec Poseidon2 benches (`benches/aztec`)
+
+Output:
+- `bench-comparison.md` at the repo root. If Aztec or O(1) benches are unavailable, the script skips them with a warning.
+
 ## Security
 
 - 128-bit security level (parameterized Poseidon, t=3)

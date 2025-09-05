@@ -1,0 +1,16 @@
+[package]
+name = "aztec-poseidon2-benches"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false }
+acir_field = { git = "https://github.com/noir-lang/noir", tag = "v1.0.0-beta.11" }
+aztec-barretenberg-sys-rs = { path = "../../aztec-packages/crates/aztec-barretenberg-sys-rs" }
+
+[[bench]]
+name = "poseidon2"
+harness = false
+

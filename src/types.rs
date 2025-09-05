@@ -245,6 +245,7 @@ pub mod poseidon2 {
     use crate::parameters::poseidon2_pallas::{
         PALLAS_POSEIDON2_PARAMS, PALLAS_POSEIDON2_PARAMS_T4,
     };
+    // BN254-specific parameters are imported in the BN254 module below.
     use crate::primitive::PackingConfig;
     use ark_crypto_primitives::sponge::CryptographicSponge;
 
@@ -374,6 +375,80 @@ pub mod poseidon2 {
             let b: ark_pallas::Fq = b.into();
             let c: ark_pallas::Fq = c.into();
             self.sponge.compress_3(a, b, c)
+        }
+    }
+}
+
+// BN254 Poseidon2 hasher (explicit algorithm/version)
+pub mod poseidon2_bn254 {
+    use super::{FieldInput, PoseidonHasher};
+    use crate::hasher::MultiFieldHasherV2;
+    use crate::parameters::poseidon2_bn254::{
+        BN254_POSEIDON2_PARAMS, BN254_POSEIDON2_PARAMS_T4,
+    };
+    use crate::primitive::PackingConfig;
+
+    pub struct BN254Poseidon2Hasher {
+        inner: MultiFieldHasherV2<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>,
+    }
+
+    impl PoseidonHasher<ark_bn254::Fq, FieldInput<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>>
+        for BN254Poseidon2Hasher
+    {
+        fn new() -> Self {
+            Self { inner: MultiFieldHasherV2::new_from_ref(&*BN254_POSEIDON2_PARAMS) }
+        }
+
+        fn new_with_config(config: PackingConfig) -> Self {
+            Self {
+                inner: MultiFieldHasherV2::new_with_config_from_ref(
+                    &*BN254_POSEIDON2_PARAMS,
+                    config,
+                ),
+            }
+        }
+
+        fn update_field_input(
+            &mut self,
+            input: FieldInput<ark_bn254::Fq, ark_bn254::Fr, ark_bn254::G1Affine>,
+        ) {
+            self.inner.update(input)
+        }
+        fn digest_result(&mut self) -> ark_bn254::Fq { self.inner.digest() }
+        fn reset_hasher(&mut self) { self.inner.reset() }
+        fn get_element_count(&self) -> usize { self.inner.element_count() }
+    }
+
+    impl Default for BN254Poseidon2Hasher {
+        fn default() -> Self { <Self as super::PoseidonHasher<_, _>>::new() }
+    }
+
+    impl BN254Poseidon2Hasher {
+        pub fn new() -> Self { <Self as super::PoseidonHasher<_, _>>::new() }
+        pub fn new_with_config(config: PackingConfig) -> Self {
+            <Self as super::PoseidonHasher<_, _>>::new_with_config(config)
+        }
+        pub fn new_with_domain(domain: impl AsRef<[u8]>) -> Self {
+            let mut h = <Self as super::PoseidonHasher<_, _>>::new();
+            h.inner.absorb_domain(domain.as_ref());
+            h
+        }
+        pub fn new_with_config_and_domain(config: PackingConfig, domain: impl AsRef<[u8]>) -> Self {
+            let mut h = <Self as super::PoseidonHasher<_, _>>::new_with_config(config);
+            h.inner.absorb_domain(domain.as_ref());
+            h
+        }
+
+        pub fn new_variant_t4() -> Self {
+            Self { inner: MultiFieldHasherV2::new_from_ref(&*BN254_POSEIDON2_PARAMS_T4) }
+        }
+        pub fn new_with_config_variant_t4(config: PackingConfig) -> Self {
+            Self {
+                inner: MultiFieldHasherV2::new_with_config_from_ref(
+                    &*BN254_POSEIDON2_PARAMS_T4,
+                    config,
+                ),
+            }
         }
     }
 }
